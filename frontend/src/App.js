@@ -3,7 +3,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import Login from './pages/Login';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
-import UserManagement from './pages/UserManagement';
+import UserManagementNew from './pages/UserManagementNew';
 import OutletManagement from './pages/OutletManagement';
 import ZoneManagement from './pages/ZoneManagement';
 import Settings from './pages/Settings';
