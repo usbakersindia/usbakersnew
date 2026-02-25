@@ -31,9 +31,9 @@ const SuperAdminDashboard = () => {
 
   if (loading) {
     return (
-      <Layout>
+      <LayoutWithSidebar>
         <div className="text-center py-12">Loading dashboard...</div>
-      </Layout>
+      </LayoutWithSidebar>
     );
   }
 
