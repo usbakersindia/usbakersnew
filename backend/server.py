@@ -457,6 +457,7 @@ async def login(login_data: LoginRequest):
         name=user.name,
         phone=user.phone,
         role=user.role,
+        permissions=user.permissions,
         outlet_id=user.outlet_id,
         is_active=user.is_active,
         created_at=user.created_at
