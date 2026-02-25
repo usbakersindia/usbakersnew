@@ -463,12 +463,48 @@ async def login(login_data: LoginRequest):
         phone=user.phone,
         role=user.role,
         permissions=user.permissions,
+        incentive_percentage=user.incentive_percentage,
         outlet_id=user.outlet_id,
         is_active=user.is_active,
         created_at=user.created_at
     )
     
     return Token(access_token=access_token, token_type="bearer", user=user_response)
+
+@api_router.post("/auth/outlet-login", response_model=Token)
+async def outlet_login(login_data: LoginRequest):
+    """Login endpoint for outlets"""
+    outlet_doc = await db.outlets.find_one({"username": login_data.email}, {"_id": 0})
+    
+    if not outlet_doc:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    
+    if isinstance(outlet_doc.get('created_at'), str):
+        outlet_doc['created_at'] = datetime.fromisoformat(outlet_doc['created_at'])
+    
+    if not outlet_doc.get('is_active'):
+        raise HTTPException(status_code=401, detail="Outlet account is inactive")
+    
+    if not verify_password(login_data.password, outlet_doc.get('password_hash')):
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    
+    # Create a special outlet user response
+    outlet_user = UserResponse(
+        id=outlet_doc['id'],
+        email=outlet_doc['username'],
+        name=outlet_doc['name'],
+        phone=outlet_doc['phone'],
+        role=UserRole.OUTLET_ADMIN,
+        permissions=["can_create_order", "can_view_orders", "can_edit_orders", "can_record_payment"],
+        incentive_percentage=0.0,
+        outlet_id=outlet_doc['id'],
+        is_active=True,
+        created_at=outlet_doc['created_at']
+    )
+    
+    access_token = create_access_token(data={"sub": outlet_doc['id'], "role": "outlet", "outlet_id": outlet_doc['id']})
+    
+    return Token(access_token=access_token, token_type="bearer", user=outlet_user)
 
 @api_router.get("/auth/me", response_model=UserResponse)
 async def get_current_user_info(current_user: User = Depends(get_current_user)):
