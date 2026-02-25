@@ -388,6 +388,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     return User(**user_doc)
 
 def require_role(allowed_roles: List[UserRole]):
+    """Legacy role-based access control - kept for backward compatibility"""
     async def role_checker(current_user: User = Depends(get_current_user)):
         if current_user.role not in allowed_roles:
             raise HTTPException(
@@ -396,6 +397,31 @@ def require_role(allowed_roles: List[UserRole]):
             )
         return current_user
     return role_checker
+
+def require_permission(required_permissions: List[str]):
+    """New permission-based access control"""
+    async def permission_checker(current_user: User = Depends(get_current_user)):
+        # Super admin has all permissions
+        if current_user.role == UserRole.SUPER_ADMIN:
+            return current_user
+        
+        # Check if user has any of the required permissions
+        user_permissions = set(current_user.permissions)
+        required_perms = set(required_permissions)
+        
+        if not user_permissions.intersection(required_perms):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access denied. Required permissions: {required_permissions}"
+            )
+        return current_user
+    return permission_checker
+
+def has_permission(user: User, permission: str) -> bool:
+    """Check if user has a specific permission"""
+    if user.role == UserRole.SUPER_ADMIN:
+        return True
+    return permission in user.permissions
 
 # ==================== AUTH ENDPOINTS ====================
 
