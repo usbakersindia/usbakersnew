@@ -13,6 +13,8 @@ const Sidebar = () => {
 
   const isSuperAdmin = user?.role === 'super_admin';
 
+  const isActive = (path) => location.pathname === path;
+
   // Define menu items based on role
   const menuItems = isSuperAdmin 
     ? [
