@@ -806,6 +806,111 @@ async def update_order_status(
     
     return {"message": f"Order status updated to {status.value}"}
 
+# ==================== PETPOOJA WEBHOOK ====================
+
+@api_router.post("/petpooja/callback")
+async def petpooja_callback(request_data: Dict[str, Any]):
+    """
+    Webhook endpoint for PetPooja POS to send order updates
+    PetPooja will POST to this endpoint with order status changes
+    """
+    try:
+        rest_id = request_data.get('restID')
+        order_id = request_data.get('orderID')  # Our system's order ID
+        status = request_data.get('status')
+        cancel_reason = request_data.get('cancel_reason')
+        min_prep_time = request_data.get('minimum_prep_time')
+        min_delivery_time = request_data.get('minimum_delivery_time')
+        rider_name = request_data.get('rider_name')
+        rider_phone = request_data.get('rider_phone_number')
+        is_modified = request_data.get('is_modified', False)
+        
+        logger.info(f"PetPooja callback received for order: {order_id}, status: {status}")
+        
+        # Find order in our system
+        order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+        if not order:
+            logger.error(f"Order not found: {order_id}")
+            return {"success": False, "message": "Order not found"}
+        
+        # Update order based on PetPooja status
+        update_data = {
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Map PetPooja status to our system
+        if status == "-1":
+            # Cancelled
+            update_data['status'] = OrderStatus.CANCELLED.value
+            update_data['is_deleted'] = True
+            if cancel_reason:
+                update_data['special_instructions'] = f"{order.get('special_instructions', '')}\n\nCancelled by PetPooja: {cancel_reason}"
+        
+        elif status in ["1", "2", "3"]:
+            # Accepted/Confirmed
+            update_data['status'] = OrderStatus.CONFIRMED.value
+            if min_prep_time:
+                update_data['petpooja_prep_time'] = min_prep_time
+        
+        elif status == "4":
+            # Dispatched
+            update_data['status'] = OrderStatus.PICKED_UP.value
+            if rider_name:
+                update_data['assigned_delivery_partner_name'] = rider_name
+            if rider_phone:
+                update_data['assigned_delivery_partner_phone'] = rider_phone
+        
+        elif status == "5":
+            # Food Ready
+            update_data['status'] = OrderStatus.READY.value
+            update_data['is_ready'] = True
+            update_data['ready_at'] = datetime.now(timezone.utc).isoformat()
+        
+        elif status == "10":
+            # Delivered
+            update_data['status'] = OrderStatus.DELIVERED.value
+            update_data['delivered_at'] = datetime.now(timezone.utc).isoformat()
+        
+        # Update modified flag
+        if is_modified:
+            update_data['modified_after_ready'] = True
+        
+        await db.orders.update_one({"id": order_id}, {"$set": update_data})
+        
+        # Log the webhook event
+        log = Log(
+            order_id=order_id,
+            action="petpooja_callback",
+            performed_by="system",
+            after_data=request_data
+        )
+        log_doc = log.model_dump()
+        log_doc['timestamp'] = log_doc['timestamp'].isoformat()
+        await db.logs.insert_one(log_doc)
+        
+        return {"success": True, "message": "Order updated successfully"}
+    
+    except Exception as e:
+        logger.error(f"PetPooja callback error: {str(e)}")
+        return {"success": False, "message": str(e)}
+
+@api_router.get("/petpooja/webhook-url")
+async def get_petpooja_webhook_url(current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))):
+    """Get the PetPooja webhook URL to provide to PetPooja team"""
+    backend_url = os.environ.get('REACT_APP_BACKEND_URL', 'http://localhost:8001')
+    webhook_url = f"{backend_url}/api/petpooja/callback"
+    
+    return {
+        "webhook_url": webhook_url,
+        "method": "POST",
+        "description": "Provide this URL to PetPooja team for order status callbacks",
+        "expected_fields": [
+            "restID", "orderID", "status", "cancel_reason", 
+            "minimum_prep_time", "minimum_delivery_time", 
+            "rider_name", "rider_phone_number", "is_modified"
+        ]
+    }
+
 # ==================== PAYMENT MANAGEMENT ====================
 
 @api_router.post("/payments")
