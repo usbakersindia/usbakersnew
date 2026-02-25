@@ -505,6 +505,7 @@ async def create_user(
         name=user_data.name,
         phone=user_data.phone,
         role=user_data.role,
+        permissions=user_data.permissions,
         password_hash=get_password_hash(user_data.password),
         outlet_id=user_data.outlet_id,
         created_by=current_user.id
@@ -521,6 +522,7 @@ async def create_user(
         name=user.name,
         phone=user.phone,
         role=user.role,
+        permissions=user.permissions,
         outlet_id=user.outlet_id,
         is_active=user.is_active,
         created_at=user.created_at
