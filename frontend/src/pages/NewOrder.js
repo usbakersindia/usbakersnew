@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import Layout from '../components/Layout';
+import LayoutWithSidebar from '../components/LayoutWithSidebar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -144,7 +144,7 @@ const NewOrder = () => {
   };
 
   return (
-    <Layout>
+    <LayoutWithSidebar>
       <div className="space-y-6">
         <div>
           <h2 className="text-3xl font-bold" style={{ color: '#e92587' }}>New Order</h2>
@@ -603,7 +603,7 @@ const NewOrder = () => {
           </div>
         </form>
       </div>
-    </Layout>
+    </LayoutWithSidebar>
   );
 };
 
