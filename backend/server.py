@@ -115,9 +115,10 @@ class User(BaseModel):
     email: EmailStr
     name: str
     phone: str
-    role: UserRole
+    role: UserRole  # Keep for backward compatibility, but permissions take precedence
+    permissions: List[str] = []  # New: List of permission strings
     password_hash: str
-    outlet_id: Optional[str] = None  # For outlet_admin, order_manager, kitchen
+    outlet_id: Optional[str] = None  # Can be assigned to specific outlet
     is_active: bool = True
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     created_by: Optional[str] = None  # User ID of creator
@@ -126,7 +127,8 @@ class UserCreate(BaseModel):
     email: EmailStr
     name: str
     phone: str
-    role: UserRole
+    role: UserRole = UserRole.ORDER_MANAGER  # Default role for compatibility
+    permissions: List[str] = []
     password: str
     outlet_id: Optional[str] = None
 
@@ -136,6 +138,7 @@ class UserResponse(BaseModel):
     name: str
     phone: str
     role: UserRole
+    permissions: List[str]
     outlet_id: Optional[str] = None
     is_active: bool
     created_at: datetime
