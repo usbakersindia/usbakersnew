@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
-import Layout from '../components/Layout';
+import LayoutWithSidebar from '../components/LayoutWithSidebar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -105,14 +105,14 @@ const UserManagement = () => {
 
   if (loading) {
     return (
-      <Layout>
+      <LayoutWithSidebar>
         <div className="text-center py-12">Loading...</div>
-      </Layout>
+      </LayoutWithSidebar>
     );
   }
 
   return (
-    <Layout>
+    <LayoutWithSidebar>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex justify-between items-center">
@@ -312,7 +312,7 @@ const UserManagement = () => {
           </CardContent>
         </Card>
       </div>
-    </Layout>
+    </LayoutWithSidebar>
   );
 };
 
