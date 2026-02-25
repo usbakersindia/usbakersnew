@@ -1121,6 +1121,100 @@ async def get_order_payments(
     
     return payments
 
+# ==================== CUSTOMERS ENDPOINT ====================
+
+@api_router.get("/customers")
+async def get_customers(
+    outlet_id: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Get all customers aggregated from orders"""
+    query = {"is_deleted": False}
+    
+    # Filter by outlet if not super admin
+    if current_user.role != UserRole.SUPER_ADMIN and current_user.outlet_id:
+        query["outlet_id"] = current_user.outlet_id
+    elif outlet_id:
+        query["outlet_id"] = outlet_id
+    
+    # Aggregate customers from orders
+    pipeline = [
+        {"$match": query},
+        {
+            "$group": {
+                "_id": "$customer_info.phone",
+                "name": {"$first": "$customer_info.name"},
+                "phone": {"$first": "$customer_info.phone"},
+                "email": {"$first": "$customer_info.email"},
+                "birthday": {"$first": "$customer_info.birthday"},
+                "gender": {"$first": "$customer_info.gender"},
+                "total_orders": {"$sum": 1},
+                "total_spent": {"$sum": "$paid_amount"},
+                "pending_amount": {"$sum": "$pending_amount"},
+                "last_order_date": {"$max": "$created_at"}
+            }
+        },
+        {"$sort": {"total_orders": -1}}
+    ]
+    
+    customers = await db.orders.aggregate(pipeline).to_list(1000)
+    
+    return customers
+
+# ==================== DASHBOARD WITH BRANCH SUMMARY ====================
+
+@api_router.get("/dashboard/branch-summary")
+async def get_branch_summary(
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Get branch-wise summary for super admin dashboard"""
+    outlets = await db.outlets.find({"is_active": True}, {"_id": 0}).to_list(100)
+    today = datetime.now(timezone.utc).date().isoformat()
+    
+    branch_data = []
+    
+    for outlet in outlets:
+        outlet_id = outlet['id']
+        
+        # Total orders (all time)
+        total_orders = await db.orders.count_documents({
+            "outlet_id": outlet_id,
+            "is_deleted": False
+        })
+        
+        # Today's orders
+        todays_orders = await db.orders.count_documents({
+            "outlet_id": outlet_id,
+            "delivery_date": today,
+            "is_deleted": False
+        })
+        
+        # Total income (all paid amounts)
+        income_pipeline = [
+            {"$match": {"outlet_id": outlet_id, "is_deleted": False}},
+            {"$group": {"_id": None, "total": {"$sum": "$paid_amount"}}}
+        ]
+        income_result = await db.orders.aggregate(income_pipeline).to_list(1)
+        total_income = income_result[0]['total'] if income_result else 0
+        
+        # Pending orders (not ready, not delivered)
+        pending_orders = await db.orders.count_documents({
+            "outlet_id": outlet_id,
+            "status": {"$in": ["confirmed"]},
+            "is_deleted": False
+        })
+        
+        branch_data.append({
+            "outlet_id": outlet_id,
+            "outlet_name": outlet['name'],
+            "total_orders": total_orders,
+            "todays_orders": todays_orders,
+            "total_income": total_income,
+            "pending_orders": pending_orders
+        })
+    
+    return branch_data
+
 # ==================== DASHBOARD (Super Admin) ====================
 
 @api_router.get("/dashboard/stats", response_model=DashboardStats)
