@@ -474,6 +474,7 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
         name=current_user.name,
         phone=current_user.phone,
         role=current_user.role,
+        permissions=current_user.permissions,
         outlet_id=current_user.outlet_id,
         is_active=current_user.is_active,
         created_at=current_user.created_at
