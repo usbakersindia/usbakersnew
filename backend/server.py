@@ -13,6 +13,7 @@ from enum import Enum
 import os
 import logging
 import uuid
+import requests
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).parent
