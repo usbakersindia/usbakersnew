@@ -717,7 +717,7 @@ async def get_all_outlets(current_user: User = Depends(get_current_user)):
 @api_router.patch("/outlets/{outlet_id}")
 async def update_outlet(
     outlet_id: str,
-    outlet_data: OutletCreate,
+    outlet_data: OutletUpdate,
     current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
 ):
     """Update outlet (Super Admin only)"""
