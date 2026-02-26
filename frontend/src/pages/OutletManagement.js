@@ -363,20 +363,6 @@ const OutletManagement = () => {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="edit-incentive">Incentive Percentage *</Label>
-                <Input
-                  id="edit-incentive"
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  max="100"
-                  value={formData.incentive_percentage}
-                  onChange={(e) => setFormData({ ...formData, incentive_percentage: parseFloat(e.target.value) })}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
                 <Label htmlFor="edit-buffer">Ready Time Buffer (minutes) *</Label>
                 <Input
                   id="edit-buffer"
