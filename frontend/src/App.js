@@ -87,6 +87,14 @@ const AppRoutes = () => {
         }
       />
       <Route
+        path="/whatsapp-templates"
+        element={
+          <ProtectedRoute allowedRoles={['super_admin']}>
+            <WhatsAppTemplates />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/settings"
         element={
           <ProtectedRoute allowedRoles={['super_admin']}>
