@@ -36,6 +36,10 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer()
 
+# AiSensy WhatsApp Configuration
+AISENSY_API_KEY = os.environ.get("AISENSY_API_KEY", "")
+AISENSY_API_ENDPOINT = os.environ.get("AISENSY_API_ENDPOINT", "https://backend.aisensy.com/campaign/t1/api/v2")
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
