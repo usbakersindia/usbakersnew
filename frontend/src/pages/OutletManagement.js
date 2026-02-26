@@ -79,7 +79,8 @@ const OutletManagement = () => {
       address: outlet.address,
       city: outlet.city,
       phone: outlet.phone,
-      incentive_percentage: outlet.incentive_percentage,
+      username: outlet.username,
+      password: '', // Leave empty - user can update if needed
       ready_time_buffer_minutes: outlet.ready_time_buffer_minutes
     });
     setEditDialogOpen(true);
