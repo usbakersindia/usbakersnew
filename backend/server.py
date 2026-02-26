@@ -972,7 +972,7 @@ async def update_order_status(
     status: OrderStatus,
     current_user: User = Depends(get_current_user)
 ):
-    """Update order status"""
+    """Update order status and send WhatsApp notification"""
     order = await db.orders.find_one({"id": order_id}, {"_id": 0})
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -1000,6 +1000,20 @@ async def update_order_status(
     log_doc = log.model_dump()
     log_doc['timestamp'] = log_doc['timestamp'].isoformat()
     await db.logs.insert_one(log_doc)
+    
+    # Send WhatsApp notification based on status
+    try:
+        event_map = {
+            OrderStatus.CONFIRMED: WhatsAppTemplateEvent.ORDER_CONFIRMED,
+            OrderStatus.READY: WhatsAppTemplateEvent.ORDER_READY,
+            OrderStatus.PICKED_UP: WhatsAppTemplateEvent.OUT_FOR_DELIVERY,
+            OrderStatus.DELIVERED: WhatsAppTemplateEvent.DELIVERED
+        }
+        
+        if status in event_map:
+            await send_whatsapp_notification(order_id, event_map[status])
+    except Exception as e:
+        logger.error(f"WhatsApp notification failed for order {order_id}: {str(e)}")
     
     return {"message": f"Order status updated to {status.value}"}
 
