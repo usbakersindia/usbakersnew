@@ -20,6 +20,7 @@ const NewOrder = () => {
   const navigate = useNavigate();
   const [outlets, setOutlets] = useState([]);
   const [zones, setZones] = useState([]);
+  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
