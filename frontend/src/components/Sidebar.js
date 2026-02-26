@@ -2,7 +2,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { LayoutDashboard, ShoppingCart, Clock, Store, Users, MapPin, Settings, LogOut, Menu, X } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Clock, Store, Users, MapPin, Settings, LogOut, Menu, X, MessageSquare } from 'lucide-react';
 import { useState } from 'react';
 
 const Sidebar = () => {
