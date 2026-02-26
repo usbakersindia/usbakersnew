@@ -465,19 +465,21 @@ const ManageOrders = () => {
                                     <DollarSign className="h-4 w-4" />
                                   </Button>
                                 )}
-                                {STATUS_CONFIG[order.status]?.nextStatus && (
-                                  <Button
-                                    size="sm"
-                                    style={{ backgroundColor: '#e92587' }}
-                                    className="text-white"
-                                    onClick={() => handleStatusUpdate(order.id, STATUS_CONFIG[order.status].nextStatus)}
-                                    title={`Mark as ${STATUS_CONFIG[STATUS_CONFIG[order.status].nextStatus].label}`}
-                                  >
-                                    {STATUS_CONFIG[STATUS_CONFIG[order.status].nextStatus].icon && (
-                                      <STATUS_CONFIG[STATUS_CONFIG[order.status].nextStatus].icon className="h-4 w-4" />
-                                    )}
-                                  </Button>
-                                )}
+                                {STATUS_CONFIG[order.status]?.nextStatus && (() => {
+                                  const nextStatus = STATUS_CONFIG[order.status].nextStatus;
+                                  const NextIcon = STATUS_CONFIG[nextStatus].icon;
+                                  return (
+                                    <Button
+                                      size="sm"
+                                      style={{ backgroundColor: '#e92587' }}
+                                      className="text-white"
+                                      onClick={() => handleStatusUpdate(order.id, nextStatus)}
+                                      title={`Mark as ${STATUS_CONFIG[nextStatus].label}`}
+                                    >
+                                      {NextIcon && <NextIcon className="h-4 w-4" />}
+                                    </Button>
+                                  );
+                                })()}
                               </div>
                             </TableCell>
                           </TableRow>
