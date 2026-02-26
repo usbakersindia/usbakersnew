@@ -229,14 +229,14 @@ const UserManagementNew = () => {
                       <div className="space-y-2">
                         <Label htmlFor="outlet">Assign to Outlet (Optional)</Label>
                         <Select
-                          value={formData.outlet_id || ''}
-                          onValueChange={(value) => setFormData({ ...formData, outlet_id: value })}
+                          value={formData.outlet_id || 'none'}
+                          onValueChange={(value) => setFormData({ ...formData, outlet_id: value === 'none' ? null : value })}
                         >
                           <SelectTrigger data-testid="user-outlet-select">
                             <SelectValue placeholder="Select outlet" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">No Outlet</SelectItem>
+                            <SelectItem value="none">No Outlet</SelectItem>
                             {outlets.map((outlet) => (
                               <SelectItem key={outlet.id} value={outlet.id}>
                                 {outlet.name}
