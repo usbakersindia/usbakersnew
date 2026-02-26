@@ -50,11 +50,13 @@ const NewOrder = () => {
     delivery_date: '',
     delivery_time: '',
     outlet_id: '',
+    order_taken_by: '',
     total_amount: 0
   });
 
   useEffect(() => {
     fetchOutlets();
+    fetchUsers();
   }, []);
 
   useEffect(() => {
