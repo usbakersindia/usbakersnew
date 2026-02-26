@@ -185,6 +185,15 @@ class OutletCreate(BaseModel):
     password: str
     ready_time_buffer_minutes: int = 30
 
+class OutletUpdate(BaseModel):
+    name: str
+    address: str
+    city: str
+    phone: str
+    username: str
+    password: Optional[str] = None  # Optional for updates
+    ready_time_buffer_minutes: int = 30
+
 class OutletResponse(BaseModel):
     id: str
     name: str
