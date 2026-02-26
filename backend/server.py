@@ -716,7 +716,20 @@ async def update_outlet(
     if not outlet:
         raise HTTPException(status_code=404, detail="Outlet not found")
     
-    update_data = outlet_data.model_dump()
+    # Prepare update data
+    update_data = {
+        "name": outlet_data.name,
+        "address": outlet_data.address,
+        "city": outlet_data.city,
+        "phone": outlet_data.phone,
+        "username": outlet_data.username,
+        "ready_time_buffer_minutes": outlet_data.ready_time_buffer_minutes
+    }
+    
+    # Only update password if provided
+    if outlet_data.password:
+        update_data['password_hash'] = get_password_hash(outlet_data.password)
+    
     await db.outlets.update_one({"id": outlet_id}, {"$set": update_data})
     
     return {"message": "Outlet updated successfully"}
