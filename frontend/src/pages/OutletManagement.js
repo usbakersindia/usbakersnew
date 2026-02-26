@@ -364,6 +364,30 @@ const OutletManagement = () => {
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="edit-username">Outlet Username *</Label>
+                <Input
+                  id="edit-username"
+                  value={formData.username}
+                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                  required
+                  placeholder="e.g., downtown_bakery"
+                />
+                <p className="text-xs text-gray-500">Username for outlet login</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-password">New Password (optional)</Label>
+                <Input
+                  id="edit-password"
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  placeholder="Leave empty to keep current password"
+                />
+                <p className="text-xs text-gray-500">Only fill if you want to change the password</p>
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="edit-buffer">Ready Time Buffer (minutes) *</Label>
                 <Input
                   id="edit-buffer"
