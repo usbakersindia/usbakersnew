@@ -37,7 +37,7 @@ const AppRoutes = () => {
       <Route
         path="/dashboard"
         element={
-          <ProtectedRoute allowedRoles={['super_admin']}>
+          <ProtectedRoute allowedRoles={['super_admin', 'outlet_admin', 'order_manager']}>
             <SuperAdminDashboard />
           </ProtectedRoute>
         }
@@ -69,7 +69,7 @@ const AppRoutes = () => {
       <Route
         path="/customers"
         element={
-          <ProtectedRoute allowedRoles={['super_admin']}>
+          <ProtectedRoute allowedRoles={['super_admin', 'outlet_admin', 'order_manager']}>
             <Customers />
           </ProtectedRoute>
         }

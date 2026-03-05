@@ -23,7 +23,15 @@ const Login = () => {
     const result = await login(email, password);
 
     if (result.success) {
-      navigate('/dashboard');
+      // Redirect based on user role
+      const { user } = result;
+      if (user.role === 'kitchen') {
+        navigate('/kitchen');
+      } else if (user.role === 'delivery') {
+        navigate('/delivery');
+      } else {
+        navigate('/dashboard');
+      }
     } else {
       setError(result.error);
     }
