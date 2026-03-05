@@ -426,6 +426,60 @@ class WhatsAppMessageLog(BaseModel):
     message_id: Optional[str] = None
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+# ==================== MSG91 WHATSAPP MODELS ====================
+
+class MSG91Config(BaseModel):
+    """MSG91 WhatsApp Configuration"""
+    model_config = ConfigDict(extra="ignore")
+    
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    auth_key: str
+    integrated_number: str  # WhatsApp Business Number
+    is_active: bool = True
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class MSG91ConfigCreate(BaseModel):
+    auth_key: str
+    integrated_number: str
+
+class MSG91ConfigUpdate(BaseModel):
+    auth_key: Optional[str] = None
+    integrated_number: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class MSG91Template(BaseModel):
+    """MSG91 WhatsApp Template Configuration"""
+    model_config = ConfigDict(extra="ignore")
+    
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    event_type: WhatsAppTemplateEvent
+    template_name: str  # MSG91 template name
+    namespace: str  # MSG91 namespace
+    language_code: str = "en"
+    language_policy: str = "deterministic"
+    variables: List[str] = []  # List of variable names (body_1, body_2, etc.)
+    is_enabled: bool = False
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class MSG91TemplateCreate(BaseModel):
+    event_type: WhatsAppTemplateEvent
+    template_name: str
+    namespace: str
+    language_code: str = "en"
+    language_policy: str = "deterministic"
+    variables: List[str] = []
+    is_enabled: bool = False
+
+class MSG91TemplateUpdate(BaseModel):
+    template_name: Optional[str] = None
+    namespace: Optional[str] = None
+    language_code: Optional[str] = None
+    language_policy: Optional[str] = None
+    variables: Optional[List[str]] = None
+    is_enabled: Optional[bool] = None
+
 # ==================== AUTH UTILITIES ====================
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -1033,7 +1087,10 @@ async def update_order_status(
         }
         
         if status in event_map:
-            await send_whatsapp_notification(order_id, event_map[status])
+            # Try MSG91 first, fallback to AiSensy
+            msg91_sent = await send_msg91_whatsapp(order_id, event_map[status])
+            if not msg91_sent:
+                await send_whatsapp_notification(order_id, event_map[status])
     except Exception as e:
         logger.error(f"WhatsApp notification failed for order {order_id}: {str(e)}")
     
@@ -1720,6 +1777,239 @@ async def get_whatsapp_logs(
             log['timestamp'] = datetime.fromisoformat(log['timestamp'])
     
     return logs
+
+# ==================== MSG91 WHATSAPP CONFIGURATION ====================
+
+@api_router.get("/msg91/config")
+async def get_msg91_config(
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Get MSG91 configuration (Super Admin only)"""
+    config = await db.msg91_config.find_one({}, {"_id": 0})
+    
+    if not config:
+        return {"auth_key": "", "integrated_number": "", "is_active": False}
+    
+    # Convert datetime strings
+    if isinstance(config.get('created_at'), str):
+        config['created_at'] = datetime.fromisoformat(config['created_at'])
+    if isinstance(config.get('updated_at'), str):
+        config['updated_at'] = datetime.fromisoformat(config['updated_at'])
+    
+    return config
+
+@api_router.post("/msg91/config")
+async def create_or_update_msg91_config(
+    config_data: MSG91ConfigCreate,
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Create or update MSG91 configuration (Super Admin only)"""
+    
+    existing = await db.msg91_config.find_one({})
+    
+    if existing:
+        # Update existing
+        update_data = {
+            "auth_key": config_data.auth_key,
+            "integrated_number": config_data.integrated_number,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.msg91_config.update_one({}, {"$set": update_data})
+    else:
+        # Create new
+        config = MSG91Config(
+            auth_key=config_data.auth_key,
+            integrated_number=config_data.integrated_number
+        )
+        config_doc = config.model_dump()
+        config_doc['created_at'] = config_doc['created_at'].isoformat()
+        config_doc['updated_at'] = config_doc['updated_at'].isoformat()
+        await db.msg91_config.insert_one(config_doc)
+    
+    return {"message": "MSG91 configuration saved successfully"}
+
+@api_router.get("/msg91/templates")
+async def get_msg91_templates(
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Get all MSG91 templates (Super Admin only)"""
+    templates = await db.msg91_templates.find({}, {"_id": 0}).to_list(100)
+    
+    for template in templates:
+        if isinstance(template.get('created_at'), str):
+            template['created_at'] = datetime.fromisoformat(template['created_at'])
+        if isinstance(template.get('updated_at'), str):
+            template['updated_at'] = datetime.fromisoformat(template['updated_at'])
+    
+    return templates
+
+@api_router.post("/msg91/templates")
+async def create_or_update_msg91_template(
+    template_data: MSG91TemplateCreate,
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Create or update MSG91 template (Super Admin only)"""
+    
+    existing = await db.msg91_templates.find_one(
+        {"event_type": template_data.event_type.value},
+        {"_id": 0}
+    )
+    
+    if existing:
+        # Update existing
+        update_data = {
+            "template_name": template_data.template_name,
+            "namespace": template_data.namespace,
+            "language_code": template_data.language_code,
+            "language_policy": template_data.language_policy,
+            "variables": template_data.variables,
+            "is_enabled": template_data.is_enabled,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.msg91_templates.update_one(
+            {"event_type": template_data.event_type.value},
+            {"$set": update_data}
+        )
+    else:
+        # Create new
+        template = MSG91Template(
+            event_type=template_data.event_type,
+            template_name=template_data.template_name,
+            namespace=template_data.namespace,
+            language_code=template_data.language_code,
+            language_policy=template_data.language_policy,
+            variables=template_data.variables,
+            is_enabled=template_data.is_enabled
+        )
+        template_doc = template.model_dump()
+        template_doc['created_at'] = template_doc['created_at'].isoformat()
+        template_doc['updated_at'] = template_doc['updated_at'].isoformat()
+        await db.msg91_templates.insert_one(template_doc)
+    
+    return {"message": "MSG91 template saved successfully"}
+
+async def send_msg91_whatsapp(
+    order_id: str,
+    event_type: WhatsAppTemplateEvent
+) -> bool:
+    """Send WhatsApp notification via MSG91"""
+    try:
+        # Get MSG91 config
+        config = await db.msg91_config.find_one({}, {"_id": 0})
+        if not config or not config.get('is_active'):
+            logger.info("MSG91 is not configured or not active")
+            return False
+        
+        # Get template
+        template = await db.msg91_templates.find_one(
+            {"event_type": event_type.value},
+            {"_id": 0}
+        )
+        
+        if not template or not template.get('is_enabled'):
+            logger.info(f"MSG91 template for {event_type.value} not enabled")
+            return False
+        
+        # Get order details
+        order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+        if not order:
+            logger.error(f"Order {order_id} not found")
+            return False
+        
+        # Extract customer info
+        customer_info = order.get('customer_info', {})
+        customer_name = customer_info.get('name', 'Customer')
+        customer_phone = customer_info.get('phone', '')
+        
+        # Validate phone - MSG91 expects format: country code + number (no +)
+        if not customer_phone:
+            logger.warning(f"No phone number for order {order_id}")
+            return False
+        
+        # Remove + if present
+        phone = customer_phone.replace('+', '').replace('-', '').replace(' ', '')
+        
+        # Prepare template variables
+        variable_values = {
+            "body_1": customer_name,
+            "body_2": order.get('order_number', order_id),
+            "body_3": order.get('delivery_date', 'N/A'),
+            "body_4": order.get('delivery_time', 'N/A')
+        }
+        
+        # Build components based on template variables
+        components = {}
+        for var in template.get('variables', []):
+            if var in variable_values:
+                components[var] = {
+                    "type": "text",
+                    "value": variable_values[var]
+                }
+        
+        # Prepare MSG91 payload
+        payload = {
+            "integrated_number": config['integrated_number'],
+            "content_type": "template",
+            "payload": {
+                "messaging_product": "whatsapp",
+                "type": "template",
+                "template": {
+                    "name": template['template_name'],
+                    "language": {
+                        "code": template.get('language_code', 'en'),
+                        "policy": template.get('language_policy', 'deterministic')
+                    },
+                    "namespace": template['namespace'],
+                    "to_and_components": [
+                        {
+                            "to": [phone],
+                            "components": components
+                        }
+                    ]
+                }
+            }
+        }
+        
+        # Send request to MSG91
+        headers = {
+            "Content-Type": "application/json",
+            "authkey": config['auth_key']
+        }
+        
+        response = requests.post(
+            "https://api.msg91.com/api/v5/whatsapp/whatsapp-outbound-message/bulk/",
+            json=payload,
+            headers=headers,
+            timeout=30
+        )
+        
+        # Log the message
+        log = WhatsAppMessageLog(
+            order_id=order_id,
+            event_type=event_type,
+            recipient_phone=customer_phone,
+            recipient_name=customer_name,
+            campaign_name=template['template_name'],
+            status="sent" if response.status_code == 200 else "failed",
+            response_code=response.status_code,
+            response_message=response.text if response.status_code != 200 else "Success",
+            message_id=response.json().get('messageId') if response.status_code == 200 and response.text else None
+        )
+        
+        log_doc = log.model_dump()
+        log_doc['timestamp'] = log_doc['timestamp'].isoformat()
+        await db.whatsapp_logs.insert_one(log_doc)
+        
+        if response.status_code == 200:
+            logger.info(f"MSG91 WhatsApp sent for order {order_id}, event: {event_type.value}")
+            return True
+        else:
+            logger.warning(f"MSG91 WhatsApp failed: {response.status_code} - {response.text}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error sending MSG91 WhatsApp for order {order_id}: {str(e)}")
+        return False
 
 # ==================== INITIALIZE SUPER ADMIN ====================
 

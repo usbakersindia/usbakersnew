@@ -25,7 +25,8 @@ const Sidebar = () => {
         { path: '/outlets', label: 'Outlets', icon: Store, testId: 'nav-outlets' },
         { path: '/users', label: 'Users', icon: Users, testId: 'nav-users' },
         { path: '/zones', label: 'Zones', icon: MapPin, testId: 'nav-zones' },
-        { path: '/whatsapp-templates', label: 'WhatsApp', icon: MessageSquare, testId: 'nav-whatsapp' },
+        { path: '/whatsapp-templates', label: 'WhatsApp (AiSensy)', icon: MessageSquare, testId: 'nav-whatsapp' },
+        { path: '/msg91-settings', label: 'WhatsApp (MSG91)', icon: MessageSquare, testId: 'nav-msg91' },
         { path: '/settings', label: 'Settings', icon: Settings, testId: 'nav-settings' }
       ]
     : [

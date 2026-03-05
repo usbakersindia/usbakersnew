@@ -11,6 +11,7 @@ import NewOrder from './pages/NewOrder';
 import HoldOrders from './pages/HoldOrders';
 import Customers from './pages/Customers';
 import WhatsAppTemplates from './pages/WhatsAppTemplates';
+import MSG91Settings from './pages/MSG91Settings';
 import ManageOrders from './pages/ManageOrders';
 import '@/App.css';
 
@@ -100,6 +101,14 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute allowedRoles={['super_admin']}>
             <WhatsAppTemplates />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/msg91-settings"
+        element={
+          <ProtectedRoute allowedRoles={['super_admin']}>
+            <MSG91Settings />
           </ProtectedRoute>
         }
       />
