@@ -1426,44 +1426,69 @@ async def get_payment_report(
     current_user: User = Depends(get_current_user)
 ):
     """Get payment collection report"""
-    # Convert dates to datetime for comparison
-    start_dt = datetime.fromisoformat(start_date)
-    end_dt = datetime.fromisoformat(end_date)
-    
-    query = {}
-    
-    # Outlet filter
-    if current_user.role != UserRole.SUPER_ADMIN and current_user.outlet_id:
-        query['outlet_id'] = current_user.outlet_id
-    elif outlet_id:
-        query['outlet_id'] = outlet_id
-    
-    # Get all payments in date range
-    payments = await db.payments.find(query, {"_id": 0}).to_list(10000)
-    
-    # Filter by date
-    filtered_payments = [
-        p for p in payments 
-        if start_dt <= datetime.fromisoformat(p['paid_at']) <= end_dt
-    ]
-    
-    # Calculate totals by payment method
-    method_totals = {}
-    for payment in filtered_payments:
-        method = payment.get('payment_method', 'unknown')
-        amount = payment.get('amount', 0)
-        method_totals[method] = method_totals.get(method, 0) + amount
-    
-    total_collected = sum(p.get('amount', 0) for p in filtered_payments)
-    
-    return {
-        "payments": filtered_payments,
-        "summary": {
-            "total_payments": len(filtered_payments),
-            "total_collected": total_collected,
-            "by_method": method_totals
+    try:
+        # Parse dates - handle both date and datetime formats
+        if 'T' in start_date:
+            start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+        else:
+            start_dt = datetime.fromisoformat(f"{start_date}T00:00:00+00:00")
+        
+        if 'T' in end_date:
+            end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+        else:
+            end_dt = datetime.fromisoformat(f"{end_date}T23:59:59+00:00")
+        
+        query = {}
+        
+        # Outlet filter
+        if current_user.role != UserRole.SUPER_ADMIN and current_user.outlet_id:
+            # Get orders for this outlet only
+            orders = await db.orders.find({"outlet_id": current_user.outlet_id}, {"_id": 0, "id": 1}).to_list(10000)
+            order_ids = [o["id"] for o in orders]
+            query['order_id'] = {"$in": order_ids}
+        elif outlet_id:
+            # Get orders for specified outlet
+            orders = await db.orders.find({"outlet_id": outlet_id}, {"_id": 0, "id": 1}).to_list(10000)
+            order_ids = [o["id"] for o in orders]
+            query['order_id'] = {"$in": order_ids}
+        
+        # Get all payments
+        payments = await db.payments.find(query, {"_id": 0}).to_list(10000)
+        
+        # Filter by date - handle both string and datetime formats
+        filtered_payments = []
+        for p in payments:
+            paid_at = p.get('paid_at')
+            if isinstance(paid_at, str):
+                paid_dt = datetime.fromisoformat(paid_at.replace('Z', '+00:00'))
+            else:
+                paid_dt = paid_at
+            
+            if start_dt <= paid_dt <= end_dt:
+                # Convert to ISO string for JSON response
+                p['paid_at'] = paid_dt.isoformat() if not isinstance(paid_at, str) else paid_at
+                filtered_payments.append(p)
+        
+        # Calculate totals by payment method
+        method_totals = {}
+        for payment in filtered_payments:
+            method = payment.get('payment_method', 'unknown')
+            amount = payment.get('amount', 0)
+            method_totals[method] = method_totals.get(method, 0) + amount
+        
+        total_collected = sum(p.get('amount', 0) for p in filtered_payments)
+        
+        return {
+            "payments": filtered_payments,
+            "summary": {
+                "total_payments": len(filtered_payments),
+                "total_collected": round(total_collected, 2),
+                "by_method": {k: round(v, 2) for k, v in method_totals.items()}
+            }
         }
-    }
+    except Exception as e:
+        logger.error(f"Payment report error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate payment report: {str(e)}")
 
 @api_router.get("/reports/delivery")
 async def get_delivery_report(
