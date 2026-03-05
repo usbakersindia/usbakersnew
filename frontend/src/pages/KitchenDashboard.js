@@ -237,12 +237,12 @@ const KitchenDashboard = () => {
               </div>
               <div>
                 <Label>Outlet</Label>
-                <Select value={filters.outlet_id} onValueChange={(value) => setFilters({...filters, outlet_id: value})}>
+                <Select value={filters.outlet_id || "all"} onValueChange={(value) => setFilters({...filters, outlet_id: value === "all" ? "" : value})}>
                   <SelectTrigger>
                     <SelectValue placeholder="All Outlets" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Outlets</SelectItem>
+                    <SelectItem value="all">All Outlets</SelectItem>
                     {outlets.map(outlet => (
                       <SelectItem key={outlet.id} value={outlet.id}>{outlet.name}</SelectItem>
                     ))}
@@ -251,12 +251,12 @@ const KitchenDashboard = () => {
               </div>
               <div>
                 <Label>Status</Label>
-                <Select value={filters.status} onValueChange={(value) => setFilters({...filters, status: value})}>
+                <Select value={filters.status || "all"} onValueChange={(value) => setFilters({...filters, status: value === "all" ? "" : value})}>
                   <SelectTrigger>
                     <SelectValue placeholder="All Status" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Status</SelectItem>
+                    <SelectItem value="all">All Status</SelectItem>
                     <SelectItem value="confirmed">Confirmed</SelectItem>
                     <SelectItem value="ready">Ready</SelectItem>
                   </SelectContent>
