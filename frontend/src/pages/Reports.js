@@ -23,7 +23,7 @@ const Reports = () => {
   const [filters, setFilters] = useState({
     start_date: new Date(new Date().setDate(1)).toISOString().split('T')[0], // First day of month
     end_date: new Date().toISOString().split('T')[0],
-    outlet_id: ''
+    outlet_id: 'all'
   });
 
   const [orderReport, setOrderReport] = useState(null);
@@ -49,7 +49,7 @@ const Reports = () => {
       const params = new URLSearchParams();
       params.append('start_date', filters.start_date);
       params.append('end_date', filters.end_date);
-      if (filters.outlet_id) params.append('outlet_id', filters.outlet_id);
+      if (filters.outlet_id && filters.outlet_id !== 'all') params.append('outlet_id', filters.outlet_id);
       
       const response = await axios.get(`${API}/reports/orders?${params}`);
       setOrderReport(response.data);
@@ -67,7 +67,7 @@ const Reports = () => {
       const params = new URLSearchParams();
       params.append('start_date', filters.start_date + 'T00:00:00');
       params.append('end_date', filters.end_date + 'T23:59:59');
-      if (filters.outlet_id) params.append('outlet_id', filters.outlet_id);
+      if (filters.outlet_id && filters.outlet_id !== 'all') params.append('outlet_id', filters.outlet_id);
       
       const response = await axios.get(`${API}/reports/payments?${params}`);
       setPaymentReport(response.data);
@@ -85,7 +85,7 @@ const Reports = () => {
       const params = new URLSearchParams();
       params.append('start_date', filters.start_date);
       params.append('end_date', filters.end_date);
-      if (filters.outlet_id) params.append('outlet_id', filters.outlet_id);
+      if (filters.outlet_id && filters.outlet_id !== 'all') params.append('outlet_id', filters.outlet_id);
       
       const response = await axios.get(`${API}/reports/delivery?${params}`);
       setDeliveryReport(response.data);
@@ -128,12 +128,12 @@ const Reports = () => {
               {user?.role === 'super_admin' && (
                 <div>
                   <Label>Outlet</Label>
-                  <Select value={filters.outlet_id} onValueChange={(value) => setFilters({...filters, outlet_id: value})}>
+                  <Select value={filters.outlet_id || 'all'} onValueChange={(value) => setFilters({...filters, outlet_id: value === 'all' ? '' : value})}>
                     <SelectTrigger>
                       <SelectValue placeholder="All Outlets" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All Outlets</SelectItem>
+                      <SelectItem value="all">All Outlets</SelectItem>
                       {outlets.map(outlet => (
                         <SelectItem key={outlet.id} value={outlet.id}>{outlet.name}</SelectItem>
                       ))}
@@ -222,7 +222,9 @@ const Reports = () => {
                     </Card>
 
                     {/* Orders Table */}
-                    <div className="text-sm text-gray-500 mb-2">Showing {orderReport.orders.length} orders</div>
+                    <div className="text-sm text-gray-500 mb-2">
+                      Showing {orderReport.orders ? orderReport.orders.length : 0} orders
+                    </div>
                   </div>
                 )}
               </CardContent>
