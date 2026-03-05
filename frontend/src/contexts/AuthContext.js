@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 
 const AuthContext = createContext(null);
@@ -10,6 +10,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState(localStorage.getItem('token'));
+  const loginJustCompleted = useRef(false);
 
   // Configure axios defaults
   useEffect(() => {
@@ -23,6 +24,13 @@ export const AuthProvider = ({ children }) => {
   // Check if user is logged in on mount
   useEffect(() => {
     const checkAuth = async () => {
+      // Skip auth check if login just completed (user already set)
+      if (loginJustCompleted.current) {
+        loginJustCompleted.current = false;
+        setLoading(false);
+        return;
+      }
+      
       if (token) {
         try {
           const response = await axios.get(`${API}/auth/me`);
@@ -45,6 +53,7 @@ export const AuthProvider = ({ children }) => {
       const { access_token, user: userData } = response.data;
       
       localStorage.setItem('token', access_token);
+      loginJustCompleted.current = true; // Mark that login just completed
       setToken(access_token);
       setUser(userData);
       
