@@ -216,32 +216,38 @@ const PermissionManagement = () => {
             </div>
 
             <div className="space-y-6">
-              {Object.entries(availablePermissions).map(([category, perms]) => (
-                <div key={category} className="border-b pb-6 last:border-0">
-                  <h3 className="text-md font-semibold text-gray-700 mb-3 capitalize">
-                    {category}
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {Object.entries(perms).map(([permKey, permLabel]) => (
-                      <label
-                        key={permKey}
-                        className="flex items-start space-x-3 p-3 rounded hover:bg-gray-50 cursor-pointer"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isPermissionChecked(permKey)}
-                          onChange={() => handlePermissionToggle(permKey)}
-                          className="mt-1 h-4 w-4 text-blue-600 rounded focus:ring-blue-500"
-                        />
-                        <div>
-                          <div className="font-medium text-gray-900">{permLabel}</div>
-                          <div className="text-xs text-gray-500">{permKey}</div>
-                        </div>
-                      </label>
-                    ))}
+              {availablePermissions && Object.keys(availablePermissions).length > 0 ? (
+                Object.entries(availablePermissions).map(([category, perms]) => (
+                  <div key={category} className="border-b pb-6 last:border-0">
+                    <h3 className="text-md font-semibold text-gray-700 mb-3 capitalize">
+                      {category}
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {perms && Object.entries(perms).map(([permKey, permLabel]) => (
+                        <label
+                          key={permKey}
+                          className="flex items-start space-x-3 p-3 rounded hover:bg-gray-50 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isPermissionChecked(permKey)}
+                            onChange={() => handlePermissionToggle(permKey)}
+                            className="mt-1 h-4 w-4 text-blue-600 rounded focus:ring-blue-500"
+                          />
+                          <div>
+                            <div className="font-medium text-gray-900">{permLabel}</div>
+                            <div className="text-xs text-gray-500">{permKey}</div>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
                   </div>
+                ))
+              ) : (
+                <div className="text-center text-gray-500 py-8">
+                  No permissions available. Please check your backend configuration.
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </div>

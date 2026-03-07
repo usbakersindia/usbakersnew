@@ -560,11 +560,6 @@ def has_permission(user: User, permission: str) -> bool:
 
 # ==================== AUTH ENDPOINTS ====================
 
-@api_router.get("/permissions/available")
-async def get_available_permissions(current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))):
-    """Get all available permissions in the system (Super Admin only)"""
-    return AVAILABLE_PERMISSIONS
-
 @api_router.post("/auth/login", response_model=Token)
 async def login(login_data: LoginRequest):
     """Login endpoint for all user roles"""
