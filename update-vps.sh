@@ -25,7 +25,19 @@ echo ""
 echo -e "${GREEN}Step 1: Pulling latest code from GitHub...${NC}"
 # Add safe directory exception for Git
 git config --global --add safe.directory "$PROJECT_DIR" 2>/dev/null || true
-git pull origin main || git pull origin master
+
+# Stash any local changes
+echo "  → Stashing local changes..."
+git stash --include-untracked
+
+# Fetch and reset to match remote
+echo "  → Fetching latest from GitHub..."
+git fetch origin
+
+# Reset to match remote main branch
+echo "  → Updating to latest version..."
+git reset --hard origin/main
+
 echo "✅ Code updated successfully"
 echo ""
 
