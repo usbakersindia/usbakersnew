@@ -447,7 +447,7 @@ const UserManagementNew = () => {
                       <TableCell>{outlet?.name || '-'}</TableCell>
                       <TableCell>
                         <Badge variant="outline">
-                          {user.permissions?.length || 0} permissions
+                          {Array.isArray(user.permissions) ? user.permissions.length : 0} permissions
                         </Badge>
                       </TableCell>
                       <TableCell>
