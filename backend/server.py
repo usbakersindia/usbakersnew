@@ -53,13 +53,20 @@ class UserRole(str, Enum):
     ACCOUNTS = "accounts"
 
 class OrderStatus(str, Enum):
-    PENDING = "pending"
-    ON_HOLD = "on_hold"
-    CONFIRMED = "confirmed"
+    PENDING = "pending"  # Punch order, waiting for 20% payment
+    ON_HOLD = "on_hold"  # Hold order, incomplete info
+    CONFIRMED = "confirmed"  # Active order in manage orders
     READY = "ready"
     PICKED_UP = "picked_up"
     REACHED = "reached"
     DELIVERED = "delivered"
+    CANCELLED = "cancelled"
+
+class OrderLifecycleStatus(str, Enum):
+    PENDING_PAYMENT = "pending_payment"  # Punched, waiting for 20% payment
+    HOLD = "hold"  # On hold, incomplete
+    ACTIVE = "active"  # In manage orders (was confirmed)
+    COMPLETED = "completed"  # Delivered
     CANCELLED = "cancelled"
 
 class OrderType(str, Enum):
@@ -270,9 +277,11 @@ class Order(BaseModel):
     
     # Status & Workflow
     status: OrderStatus = OrderStatus.PENDING
+    lifecycle_status: str = "pending_payment"  # pending_payment, hold, active, completed, cancelled
     outlet_id: str
     created_by: str  # User ID
     order_taken_by: str  # For incentive calculation
+    is_punch_order: bool = False  # True for punch orders, False for hold orders
     
     # Payment Info
     total_amount: float = 0.0
@@ -720,6 +729,19 @@ async def get_all_users(
             user['created_at'] = datetime.fromisoformat(user['created_at'])
     
     return [UserResponse(**user) for user in users]
+
+@api_router.get("/users/order-takers")
+async def get_order_takers(current_user: User = Depends(get_current_user)):
+    """Get users who can take orders (for order_taken_by dropdown)"""
+    query = {"is_active": True}
+    
+    # Filter by outlet if not super admin
+    if current_user.role != UserRole.SUPER_ADMIN and current_user.outlet_id:
+        query["outlet_id"] = current_user.outlet_id
+    
+    users = await db.users.find(query, {"_id": 0, "id": 1, "name": 1, "email": 1, "role": 1, "outlet_id": 1}).to_list(1000)
+    
+    return [{"id": u["id"], "name": u["name"], "email": u["email"], "role": u["role"]} for u in users]
 
 @api_router.patch("/users/{user_id}/toggle-active")
 async def toggle_user_active(
