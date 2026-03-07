@@ -16,6 +16,7 @@ import KitchenDashboard from './pages/KitchenDashboard';
 import DeliveryDashboard from './pages/DeliveryDashboard';
 import Reports from './pages/Reports';
 import PermissionManagement from './pages/PermissionManagement';
+import PetPoojaSettings from './pages/PetPoojaSettings';
 import '@/App.css';
 
 const AppRoutes = () => {
@@ -152,6 +153,14 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute allowedRoles={['super_admin']}>
             <PermissionManagement />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/petpooja-settings"
+        element={
+          <ProtectedRoute allowedRoles={['super_admin']}>
+            <PetPoojaSettings />
           </ProtectedRoute>
         }
       />

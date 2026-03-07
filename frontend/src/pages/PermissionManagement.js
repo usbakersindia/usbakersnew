@@ -166,24 +166,28 @@ const PermissionManagement = () => {
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-lg font-semibold mb-4">Select Role</h2>
             <div className="space-y-2">
-              {roles.map(role => (
-                <button
-                  key={role}
-                  onClick={() => setSelectedRole(role)}
-                  className={`w-full text-left px-4 py-3 rounded-lg transition ${
-                    selectedRole === role
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  <div className="font-medium capitalize">
-                    {role.replace('_', ' ')}
-                  </div>
-                  <div className="text-sm opacity-75">
-                    {getPermissionCount(role)} permissions
-                  </div>
-                </button>
-              ))}
+              {roles && roles.length > 0 ? (
+                roles.map(role => (
+                  <button
+                    key={role}
+                    onClick={() => setSelectedRole(role)}
+                    className={`w-full text-left px-4 py-3 rounded-lg transition ${
+                      selectedRole === role
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    <div className="font-medium capitalize">
+                      {role.replace('_', ' ')}
+                    </div>
+                    <div className="text-sm opacity-75">
+                      {getPermissionCount(role)} permissions
+                    </div>
+                  </button>
+                ))
+              ) : (
+                <div className="text-gray-500">No roles available</div>
+              )}
             </div>
           </div>
 

@@ -2,7 +2,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { LayoutDashboard, ShoppingCart, Clock, Store, Users, MapPin, Settings, LogOut, Menu, X, MessageSquare, List, Receipt, Truck } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Clock, Store, Users, MapPin, Settings, LogOut, Menu, X, MessageSquare, List, Receipt, Truck, CreditCard } from 'lucide-react';
 import { useState } from 'react';
 
 const Sidebar = () => {
@@ -26,6 +26,7 @@ const Sidebar = () => {
         { path: '/zones', label: 'Zones', icon: MapPin, testId: 'nav-zones' },
         { path: '/permissions', label: 'Permissions', icon: Settings, testId: 'nav-permissions' },
         { path: '/reports', label: 'Reports', icon: Receipt, testId: 'nav-reports' },
+        { path: '/petpooja-settings', label: 'PetPooja Integration', icon: CreditCard, testId: 'nav-petpooja' },
         { path: '/msg91-settings', label: 'WhatsApp Settings', icon: MessageSquare, testId: 'nav-msg91' },
         { path: '/settings', label: 'Settings', icon: Settings, testId: 'nav-settings' }
       ]

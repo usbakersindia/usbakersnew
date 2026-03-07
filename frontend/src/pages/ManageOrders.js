@@ -646,8 +646,8 @@ const ManageOrders = () => {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() => handleAddPayment(order)}
-                                    title="Add Payment"
+                                    disabled
+                                    title="Payments are automatically synced from PetPooja POS"
                                   >
                                     <DollarSign className="h-4 w-4" />
                                   </Button>
