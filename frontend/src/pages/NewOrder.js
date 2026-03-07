@@ -12,19 +12,22 @@ import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Upload, Plus, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
 const NewOrder = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [outlets, setOutlets] = useState([]);
   const [zones, setZones] = useState([]);
-  const [users, setUsers] = useState([]);
+  const [salesPersons, setSalesPersons] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [selectedZone, setSelectedZone] = useState(null);
 
   const [formData, setFormData] = useState({
     order_type: 'self',
@@ -50,21 +53,40 @@ const NewOrder = () => {
     special_instructions: '',
     delivery_date: '',
     delivery_time: '',
-    outlet_id: '',
+    outlet_id: user?.outlet_id || '', // Auto-fetch from logged-in user
     order_taken_by: '',
     total_amount: 0
   });
 
   useEffect(() => {
+    // Auto-set outlet_id when user loads
+    if (user?.outlet_id && !formData.outlet_id) {
+      setFormData(prev => ({ ...prev, outlet_id: user.outlet_id }));
+    }
+  }, [user]);
+
+  useEffect(() => {
     fetchOutlets();
-    fetchUsers();
-  }, []);
+    if (user?.outlet_id) {
+      fetchSalesPersons(user.outlet_id);
+    }
+  }, [user]);
 
   useEffect(() => {
     if (formData.outlet_id) {
       fetchZones(formData.outlet_id);
+      fetchSalesPersons(formData.outlet_id);
     }
   }, [formData.outlet_id]);
+
+  // Auto-calculate total when zone or cake amount changes
+  useEffect(() => {
+    if (formData.needs_delivery && selectedZone) {
+      const cakeAmount = parseFloat(formData.total_amount) || 0;
+      const deliveryCharge = parseFloat(selectedZone.delivery_charge) || 0;
+      // Don't add delivery to total_amount here - backend will do it
+    }
+  }, [formData.zone_id, formData.total_amount, formData.needs_delivery, selectedZone]);
 
   const fetchOutlets = async () => {
     try {
@@ -84,12 +106,15 @@ const NewOrder = () => {
     }
   };
 
-  const fetchUsers = async () => {
+  const fetchSalesPersons = async (outletId) => {
     try {
-      const response = await axios.get(`${API}/users`);
-      setUsers(response.data);
+      const url = outletId 
+        ? `${API}/sales-persons?outlet_id=${outletId}`
+        : `${API}/sales-persons`;
+      const response = await axios.get(url);
+      setSalesPersons(response.data);
     } catch (error) {
-      console.error('Failed to fetch users:', error);
+      console.error('Failed to fetch sales persons:', error);
     }
   };
 
