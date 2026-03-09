@@ -144,13 +144,29 @@ echo ""
 echo -e "${GREEN}Step 4: Installing backend dependencies${NC}"
 cd "$PROJECT_DIR/backend"
 
-# Create virtual environment if it doesn't exist
-if [ ! -d "venv" ]; then
-    echo "  → Creating virtual environment..."
+# Remove old venv if exists
+if [ -d "venv" ]; then
+    echo "  → Removing old virtual environment..."
+    rm -rf venv
+fi
+
+# Create virtual environment
+echo "  → Creating virtual environment..."
+python3.11 -m venv venv
+
+if [ ! -f "venv/bin/activate" ]; then
+    echo "  ✗ Failed to create virtual environment"
+    echo "  Trying with python3..."
     python3 -m venv venv
 fi
 
+if [ ! -f "venv/bin/activate" ]; then
+    echo "  ✗ Virtual environment creation failed!"
+    exit 1
+fi
+
 # Activate and install
+echo "  → Installing Python packages..."
 source venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
