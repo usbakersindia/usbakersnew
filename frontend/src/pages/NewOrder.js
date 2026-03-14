@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Upload, Plus, X } from 'lucide-react';
+import { Upload, Plus, X, Mic, Square, Play, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -31,6 +31,12 @@ const NewOrder = () => {
   const [success, setSuccess] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
   const [selectedZone, setSelectedZone] = useState(null);
+  
+  // Voice recording state
+  const [isRecording, setIsRecording] = useState(false);
+  const [mediaRecorder, setMediaRecorder] = useState(null);
+  const [audioBlob, setAudioBlob] = useState(null);
+  const [audioURL, setAudioURL] = useState(null);
 
   const [formData, setFormData] = useState({
     order_type: 'self',
@@ -192,6 +198,68 @@ const NewOrder = () => {
     
     // Validate for punch orders
     if (isPunchOrder) {
+
+  // Voice Recording Functions
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const chunks = [];
+
+      recorder.ondataavailable = (e) => chunks.push(e.data);
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        setAudioBlob(blob);
+        setAudioURL(URL.createObjectURL(blob));
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      recorder.start();
+      setMediaRecorder(recorder);
+      setIsRecording(true);
+    } catch (error) {
+      setError('Microphone access denied. Please allow microphone access.');
+      console.error('Recording error:', error);
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorder && isRecording) {
+      mediaRecorder.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const deleteRecording = () => {
+    setAudioBlob(null);
+    setAudioURL(null);
+    setFormData({ ...formData, voice_instruction_url: '' });
+  };
+
+  const uploadVoiceRecording = async () => {
+    if (!audioBlob) return;
+
+    const voiceFormData = new FormData();
+    voiceFormData.append('file', audioBlob, 'voice-instruction.webm');
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.post(`${API}/upload-voice`, voiceFormData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      
+      setFormData({ ...formData, voice_instruction_url: response.data.file_url });
+      setSuccess('Voice instruction uploaded successfully!');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (error) {
+      setError('Failed to upload voice instruction');
+      console.error('Upload error:', error);
+    }
+  };
+
       const errors = [];
       if (!formData.customer_info.name) errors.push('Customer name');
       if (!formData.customer_info.phone) errors.push('Customer phone');
@@ -635,6 +703,83 @@ const NewOrder = () => {
                   placeholder="Add any special instructions here..."
                 />
               </div>
+
+              {/* Voice Instructions */}
+              <Card className="bg-blue-50 border-blue-200">
+                <CardContent className="pt-6">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-base font-semibold">🎤 Voice Instructions</Label>
+                      {audioURL && !isRecording && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={deleteRecording}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          Delete
+                        </Button>
+                      )}
+                    </div>
+                    
+                    {!audioURL && !isRecording && (
+                      <Button
+                        type="button"
+                        onClick={startRecording}
+                        className="w-full text-white"
+                        style={{ backgroundColor: '#e92587' }}
+                      >
+                        <Mic className="mr-2 h-4 w-4" />
+                        Start Recording
+                      </Button>
+                    )}
+
+                    {isRecording && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-center space-x-2 text-red-600 animate-pulse">
+                          <div className="w-3 h-3 bg-red-600 rounded-full"></div>
+                          <span className="font-semibold">Recording...</span>
+                        </div>
+                        <Button
+                          type="button"
+                          onClick={stopRecording}
+                          className="w-full"
+                          variant="destructive"
+                        >
+                          <Square className="mr-2 h-4 w-4" />
+                          Stop Recording
+                        </Button>
+                      </div>
+                    )}
+
+                    {audioURL && !isRecording && (
+                      <div className="space-y-3">
+                        <audio controls src={audioURL} className="w-full" />
+                        <Button
+                          type="button"
+                          onClick={uploadVoiceRecording}
+                          className="w-full text-white"
+                          style={{ backgroundColor: '#10b981' }}
+                        >
+                          <Upload className="mr-2 h-4 w-4" />
+                          Upload Voice Instruction
+                        </Button>
+                      </div>
+                    )}
+                    
+                    {formData.voice_instruction_url && (
+                      <Alert className="bg-green-50 border-green-200">
+                        <AlertDescription className="text-green-800">
+                          ✓ Voice instruction attached to order
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
 
               <div className="grid grid-cols-2 gap-4">
                 <div>

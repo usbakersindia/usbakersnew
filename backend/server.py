@@ -3406,6 +3406,36 @@ async def apply_permissions_to_existing_users(
 
 
 
+
+@api_router.post("/upload-voice")
+async def upload_voice_instruction(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    """Upload voice instruction audio file"""
+    try:
+        # Create voice instructions directory
+        voice_dir = ROOT_DIR / "uploads" / "voice-instructions"
+        voice_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Generate unique filename
+        file_ext = file.filename.split('.')[-1] if '.' in file.filename else 'webm'
+        unique_filename = f"voice_{uuid.uuid4()}.{file_ext}"
+        file_path = voice_dir / unique_filename
+        
+        # Save file
+        with open(file_path, "wb") as buffer:
+            content = await file.read()
+            buffer.write(content)
+        
+        # Return URL
+        file_url = f"/uploads/voice-instructions/{unique_filename}"
+        return {"file_url": file_url, "message": "Voice instruction uploaded successfully"}
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+
 @api_router.get("/health")
 async def health_check():
     return {"status": "healthy", "service": "US Bakers CRM"}

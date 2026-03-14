@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CheckCircle, Clock, Filter } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -15,10 +16,13 @@ const API = `${BACKEND_URL}/api`;
 
 const KitchenDashboard = () => {
   const [orders, setOrders] = useState([]);
+  const [realtimeOrders, setRealtimeOrders] = useState([]);
+  const [todayOrders, setTodayOrders] = useState([]);
   const [summary, setSummary] = useState(null);
   const [outlets, setOutlets] = useState([]);
   const [selectedOrders, setSelectedOrders] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('realtime');
   
   // Filters
   const [filters, setFilters] = useState({
@@ -52,7 +56,27 @@ const KitchenDashboard = () => {
       });
       
       const response = await axios.get(`${API}/kitchen/orders?${params}`);
-      setOrders(response.data);
+      const allOrders = response.data;
+      setOrders(allOrders);
+      
+      // Split orders into realtime (delivery today) and today's orders
+      const today = new Date().toISOString().split('T')[0];
+      const now = new Date();
+      
+      // Realtime: Orders for delivery today that haven't been delivered yet
+      const realtime = allOrders.filter(order => {
+        const deliveryDate = order.delivery_date?.split('T')[0];
+        return deliveryDate === today && order.status !== 'delivered' && order.status !== 'cancelled';
+      });
+      
+      // Today's orders: All orders created/scheduled for today
+      const todayScheduled = allOrders.filter(order => {
+        const deliveryDate = order.delivery_date?.split('T')[0];
+        return deliveryDate === today;
+      });
+      
+      setRealtimeOrders(realtime);
+      setTodayOrders(todayScheduled);
     } catch (error) {
       console.error('Failed to fetch orders:', error);
     }
@@ -150,6 +174,82 @@ const KitchenDashboard = () => {
     };
     return colors[status] || 'bg-gray-100 text-gray-800';
   };
+
+
+  const renderOrdersTable = (ordersList) => (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead className="w-12">
+            <input 
+              type="checkbox" 
+              onChange={(e) => {
+                if (e.target.checked) {
+                  setSelectedOrders(ordersList.map(o => o.id));
+                } else {
+                  setSelectedOrders([]);
+                }
+              }}
+              checked={selectedOrders.length === ordersList.length && ordersList.length > 0}
+            />
+          </TableHead>
+          <TableHead>Order #</TableHead>
+          <TableHead>Delivery</TableHead>
+          <TableHead>Flavour</TableHead>
+          <TableHead>Size</TableHead>
+          <TableHead>Name on Cake</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead>Customer</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {ordersList.length === 0 ? (
+          <TableRow>
+            <TableCell colSpan={8} className="text-center text-gray-500">No orders found</TableCell>
+          </TableRow>
+        ) : (
+          ordersList.map(order => (
+            <TableRow key={order.id}>
+              <TableCell>
+                <input 
+                  type="checkbox"
+                  checked={selectedOrders.includes(order.id)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedOrders([...selectedOrders, order.id]);
+                    } else {
+                      setSelectedOrders(selectedOrders.filter(id => id !== order.id));
+                    }
+                  }}
+                />
+              </TableCell>
+              <TableCell className="font-medium">{order.order_number}</TableCell>
+              <TableCell>
+                <div className="text-sm">
+                  <div>{new Date(order.delivery_date).toLocaleDateString()}</div>
+                  <div className="text-gray-500">{order.delivery_time}</div>
+                </div>
+              </TableCell>
+              <TableCell>{order.flavour}</TableCell>
+              <TableCell>{order.size_pounds} lbs</TableCell>
+              <TableCell>{order.name_on_cake || '-'}</TableCell>
+              <TableCell>
+                <Badge variant={order.status === 'ready' ? 'success' : 'default'}>
+                  {order.status}
+                </Badge>
+              </TableCell>
+              <TableCell>
+                <div className="text-sm">
+                  <div>{order.customer_info.name}</div>
+                  <div className="text-gray-500">{order.customer_info.phone}</div>
+                </div>
+              </TableCell>
+            </TableRow>
+          ))
+        )}
+      </TableBody>
+    </Table>
+  );
 
   return (
     <LayoutWithSidebar>
@@ -283,83 +383,39 @@ const KitchenDashboard = () => {
           </CardContent>
         </Card>
 
-        {/* Orders Table */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Orders ({orders.length})</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12">
-                    <input 
-                      type="checkbox" 
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedOrders(orders.map(o => o.id));
-                        } else {
-                          setSelectedOrders([]);
-                        }
-                      }}
-                      checked={selectedOrders.length === orders.length && orders.length > 0}
-                    />
-                  </TableHead>
-                  <TableHead>Order #</TableHead>
-                  <TableHead>Delivery</TableHead>
-                  <TableHead>Flavour</TableHead>
-                  <TableHead>Size</TableHead>
-                  <TableHead>Name on Cake</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Customer</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {orders.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center text-gray-500">No orders found</TableCell>
-                  </TableRow>
-                ) : (
-                  orders.map(order => (
-                    <TableRow key={order.id}>
-                      <TableCell>
-                        <input 
-                          type="checkbox" 
-                          checked={selectedOrders.includes(order.id)}
-                          onChange={() => toggleOrderSelection(order.id)}
-                        />
-                      </TableCell>
-                      <TableCell className="font-medium">{order.order_number}</TableCell>
-                      <TableCell>
-                        <div className="text-sm">
-                          <div>{order.delivery_date}</div>
-                          <div className="text-gray-500">{order.delivery_time}</div>
-                        </div>
-                      </TableCell>
-                      <TableCell>{order.flavour}</TableCell>
-                      <TableCell>{order.size_pounds} lbs</TableCell>
-                      <TableCell>{order.name_on_cake || '-'}</TableCell>
-                      <TableCell>
-                        <Badge className={getStatusColor(order.status)}>
-                          {order.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">
-                          <div>{order.customer_info?.name}</div>
-                          <div className="text-gray-500">{order.customer_info?.phone}</div>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      </div>
-    </LayoutWithSidebar>
-  );
-};
+        {/* Orders Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="grid w-full max-w-md grid-cols-2">
+            <TabsTrigger value="realtime">
+              Real-time Orders ({realtimeOrders.length})
+            </TabsTrigger>
+            <TabsTrigger value="today">
+              Orders for Day ({todayOrders.length})
+            </TabsTrigger>
+          </TabsList>
 
+          {/* Real-time Orders Tab */}
+          <TabsContent value="realtime">
+            <Card>
+              <CardHeader>
+                <CardTitle>Real-time Orders (Delivery Today)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {renderOrdersTable(realtimeOrders)}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Today's Orders Tab */}
+          <TabsContent value="today">
+            <Card>
+              <CardHeader>
+                <CardTitle>All Orders Scheduled for Today</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {renderOrdersTable(todayOrders)}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
 export default KitchenDashboard;
