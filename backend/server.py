@@ -99,11 +99,82 @@ class SalesPersonCreate(BaseModel):
 class SystemSettings(BaseModel):
     id: str = "system_settings"  # Singleton
     minimum_payment_percentage: float = 20.0  # Default 20%
+    birthday_mandatory: bool = False  # NEW: Toggle birthday field mandatory/optional
     updated_by: Optional[str] = None
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class SystemSettingsUpdate(BaseModel):
     minimum_payment_percentage: float
+    birthday_mandatory: Optional[bool] = None
+
+# NEW: Payment Threshold per Branch
+class BranchPaymentThreshold(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    outlet_id: str
+    minimum_payment_percentage: float = 20.0
+    updated_by: str
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+# NEW: Cake Flavours
+class CakeFlavour(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    is_active: bool = True
+    created_by: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class CakeFlavourCreate(BaseModel):
+    name: str
+
+# NEW: Occasions
+class Occasion(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    is_active: bool = True
+    created_by: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class OccasionCreate(BaseModel):
+    name: str
+
+# NEW: Delivery Time Slots
+class DeliveryTimeSlot(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    time_slot: str  # e.g., "10:00 AM - 12:00 PM"
+    is_active: bool = True
+    created_by: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class TimeSlotCreate(BaseModel):
+    time_slot: str
+
+# NEW: PetPooja Bills Tracking
+class PetPoojaBill(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    bill_number: str
+    outlet_id: str
+    customer_name: Optional[str] = None
+    customer_phone: Optional[str] = None
+    total_amount: float = 0.0
+    items: List[Dict[str, Any]] = []  # List of items in bill
+    has_custom_cake: bool = False  # True if bill contains "Custom Cake" item
+    synced_to_order: bool = False  # True if converted to order
+    order_id: Optional[str] = None  # Order ID if synced
+    sync_attempted_at: Optional[datetime] = None
+    sync_error: Optional[str] = None
+    bill_data: Dict[str, Any] = {}  # Raw bill data from PetPooja
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 # ==================== PERMISSIONS ====================
 # Define all available permissions in the system
@@ -274,7 +345,7 @@ class Order(BaseModel):
     model_config = ConfigDict(extra="ignore")
     
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    order_number: str = Field(default_factory=lambda: str(uuid.uuid4())[:8].upper())
+    order_number: str = Field(default_factory=lambda: str(random.randint(100000, 999999)))
     
     # Order Type
     order_type: OrderType
@@ -321,6 +392,10 @@ class Order(BaseModel):
     petpooja_comment: Optional[str] = None  # Our Order ID stored in PetPooja
     
     # Flags
+    is_credit_order: bool = False  # NEW: For credit orders
+    credit_released_by: Optional[str] = None  # Super Admin who released credit order
+    credit_released_at: Optional[datetime] = None
+    voice_instruction_url: Optional[str] = None  # NEW: Voice recording URL
     is_hold: bool = False  # Not on hold by default
     is_ready: bool = False
     ready_at: Optional[datetime] = None
@@ -362,10 +437,12 @@ class OrderCreate(BaseModel):
     secondary_images: List[str] = []
     name_on_cake: Optional[str] = None
     special_instructions: Optional[str] = None
+    voice_instruction_url: Optional[str] = None  # NEW
     delivery_date: str
     delivery_time: str
     outlet_id: str
     total_amount: float = 0.0
+    is_credit_order: bool = False  # NEW
 
 # Payment Models
 class Payment(BaseModel):
@@ -846,13 +923,19 @@ async def update_system_settings(
     current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
 ):
     """Update system settings (Super Admin only)"""
+    update_data = {
+        "minimum_payment_percentage": settings_data.minimum_payment_percentage,
+        "updated_by": current_user.id,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    # Add birthday_mandatory if provided
+    if settings_data.birthday_mandatory is not None:
+        update_data["birthday_mandatory"] = settings_data.birthday_mandatory
+    
     await db.system_settings.update_one(
         {"id": "system_settings"},
-        {"$set": {
-            "minimum_payment_percentage": settings_data.minimum_payment_percentage,
-            "updated_by": current_user.id,
-            "updated_at": datetime.now(timezone.utc).isoformat()
-        }},
+        {"$set": update_data},
         upsert=True
     )
     
@@ -924,6 +1007,319 @@ async def reset_user_password(
         "message": "Password reset successfully",
         "user_id": user_id
     }
+
+# ==================== CAKE FLAVOURS MANAGEMENT ====================
+
+@api_router.post("/flavours")
+async def create_flavour(
+    flavour_data: CakeFlavourCreate,
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Create a new cake flavour (Super Admin only)"""
+    # Check if flavour already exists
+    existing = await db.cake_flavours.find_one({"name": flavour_data.name}, {"_id": 0})
+    if existing:
+        raise HTTPException(status_code=400, detail="Flavour already exists")
+    
+    flavour = CakeFlavour(
+        name=flavour_data.name,
+        created_by=current_user.id
+    )
+    
+    doc = flavour.model_dump()
+    doc['created_at'] = doc['created_at'].isoformat()
+    
+    await db.cake_flavours.insert_one(doc)
+    return {"message": "Flavour created successfully", "flavour": doc}
+
+@api_router.get("/flavours")
+async def get_flavours():
+    """Get all active cake flavours"""
+    flavours = await db.cake_flavours.find({"is_active": True}, {"_id": 0}).to_list(100)
+    return flavours
+
+@api_router.delete("/flavours/{flavour_id}")
+async def delete_flavour(
+    flavour_id: str,
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Soft delete a flavour (Super Admin only)"""
+    await db.cake_flavours.update_one(
+        {"id": flavour_id},
+        {"$set": {"is_active": False}}
+    )
+    return {"message": "Flavour deleted successfully"}
+
+# ==================== OCCASIONS MANAGEMENT ====================
+
+@api_router.post("/occasions")
+async def create_occasion(
+    occasion_data: OccasionCreate,
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Create a new occasion (Super Admin only)"""
+    existing = await db.occasions.find_one({"name": occasion_data.name}, {"_id": 0})
+    if existing:
+        raise HTTPException(status_code=400, detail="Occasion already exists")
+    
+    occasion = Occasion(
+        name=occasion_data.name,
+        created_by=current_user.id
+    )
+    
+    doc = occasion.model_dump()
+    doc['created_at'] = doc['created_at'].isoformat()
+    
+    await db.occasions.insert_one(doc)
+    return {"message": "Occasion created successfully", "occasion": doc}
+
+@api_router.get("/occasions")
+async def get_occasions():
+    """Get all active occasions"""
+    occasions = await db.occasions.find({"is_active": True}, {"_id": 0}).to_list(100)
+    return occasions
+
+@api_router.delete("/occasions/{occasion_id}")
+async def delete_occasion(
+    occasion_id: str,
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Soft delete an occasion (Super Admin only)"""
+    await db.occasions.update_one(
+        {"id": occasion_id},
+        {"$set": {"is_active": False}}
+    )
+    return {"message": "Occasion deleted successfully"}
+
+# ==================== DELIVERY TIME SLOTS MANAGEMENT ====================
+
+@api_router.post("/time-slots")
+async def create_time_slot(
+    slot_data: TimeSlotCreate,
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Create a new delivery time slot (Super Admin only)"""
+    existing = await db.delivery_time_slots.find_one({"time_slot": slot_data.time_slot}, {"_id": 0})
+    if existing:
+        raise HTTPException(status_code=400, detail="Time slot already exists")
+    
+    slot = DeliveryTimeSlot(
+        time_slot=slot_data.time_slot,
+        created_by=current_user.id
+    )
+    
+    doc = slot.model_dump()
+    doc['created_at'] = doc['created_at'].isoformat()
+    
+    await db.delivery_time_slots.insert_one(doc)
+    return {"message": "Time slot created successfully", "time_slot": doc}
+
+@api_router.get("/time-slots")
+async def get_time_slots():
+    """Get all active delivery time slots"""
+    slots = await db.delivery_time_slots.find({"is_active": True}, {"_id": 0}).to_list(100)
+    return slots
+
+@api_router.delete("/time-slots/{slot_id}")
+async def delete_time_slot(
+    slot_id: str,
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Soft delete a time slot (Super Admin only)"""
+    await db.delivery_time_slots.update_one(
+        {"id": slot_id},
+        {"$set": {"is_active": False}}
+    )
+    return {"message": "Time slot deleted successfully"}
+
+# ==================== BRANCH PAYMENT THRESHOLD ====================
+
+@api_router.post("/branch-payment-threshold")
+async def set_branch_threshold(
+    threshold_data: Dict[str, Any],
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Set payment threshold for a specific branch (Super Admin only)"""
+    outlet_id = threshold_data.get('outlet_id')
+    percentage = threshold_data.get('minimum_payment_percentage', 20.0)
+    
+    # Check if threshold exists for this branch
+    existing = await db.branch_payment_thresholds.find_one({"outlet_id": outlet_id}, {"_id": 0})
+    
+    if existing:
+        # Update existing
+        await db.branch_payment_thresholds.update_one(
+            {"outlet_id": outlet_id},
+            {"$set": {
+                "minimum_payment_percentage": percentage,
+                "updated_by": current_user.id,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }}
+        )
+    else:
+        # Create new
+        threshold = BranchPaymentThreshold(
+            outlet_id=outlet_id,
+            minimum_payment_percentage=percentage,
+            updated_by=current_user.id
+        )
+        doc = threshold.model_dump()
+        doc['updated_at'] = doc['updated_at'].isoformat()
+        await db.branch_payment_thresholds.insert_one(doc)
+    
+    return {"message": "Branch payment threshold updated successfully"}
+
+@api_router.get("/branch-payment-threshold/{outlet_id}")
+async def get_branch_threshold(outlet_id: str):
+    """Get payment threshold for a specific branch"""
+    threshold = await db.branch_payment_thresholds.find_one({"outlet_id": outlet_id}, {"_id": 0})
+    if not threshold:
+        # Return default
+        return {"minimum_payment_percentage": 20.0}
+    return threshold
+
+# ==================== SUPER ADMIN IMPERSONATION ====================
+
+@api_router.post("/impersonate/{user_id}")
+async def impersonate_user(
+    user_id: str,
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Super Admin can impersonate any user (get their token)"""
+    user = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if not user.get('is_active', True):
+        raise HTTPException(status_code=400, detail="User is inactive")
+    
+    # Create token for the target user
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user['id'], "role": user['role']},
+        expires_delta=access_token_expires
+    )
+    
+    return Token(
+        access_token=access_token,
+        token_type="bearer",
+        user=UserResponse(**user)
+    )
+
+# ==================== PETPOOJA BILLS TRACKING ====================
+
+@api_router.get("/petpooja-bills")
+async def get_petpooja_bills(
+    outlet_id: Optional[str] = None,
+    synced: Optional[bool] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Get all PetPooja bills with sync status"""
+    query = {}
+    
+    # Filter by outlet if provided
+    if outlet_id:
+        query["outlet_id"] = outlet_id
+    elif current_user.outlet_id and current_user.role != UserRole.SUPER_ADMIN:
+        # Non-super admin can only see their outlet's bills
+        query["outlet_id"] = current_user.outlet_id
+    
+    # Filter by sync status if provided
+    if synced is not None:
+        query["synced_to_order"] = synced
+    
+    bills = await db.petpooja_bills.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return bills
+
+@api_router.post("/petpooja-bills/sync/{bill_id}")
+async def sync_petpooja_bill(
+    bill_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Manually sync a PetPooja bill to create an order"""
+    bill = await db.petpooja_bills.find_one({"id": bill_id}, {"_id": 0})
+    if not bill:
+        raise HTTPException(status_code=404, detail="Bill not found")
+    
+    if bill.get('synced_to_order'):
+        raise HTTPException(status_code=400, detail="Bill already synced")
+    
+    if not bill.get('has_custom_cake'):
+        raise HTTPException(status_code=400, detail="Bill does not contain Custom Cake item")
+    
+    # TODO: Implement logic to create order from bill
+    # For now, just mark as attempted
+    await db.petpooja_bills.update_one(
+        {"id": bill_id},
+        {"$set": {
+            "sync_attempted_at": datetime.now(timezone.utc).isoformat(),
+            "sync_error": "Manual sync not yet implemented - coming soon"
+        }}
+    )
+    
+    return {"message": "Sync attempted - feature under development"}
+
+# ==================== CREDIT ORDERS ====================
+
+@api_router.post("/orders/{order_id}/mark-credit")
+async def mark_order_as_credit(
+    order_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Mark an order as credit order"""
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    await db.orders.update_one(
+        {"id": order_id},
+        {"$set": {
+            "is_credit_order": True,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    return {"message": "Order marked as credit"}
+
+@api_router.post("/orders/{order_id}/release-credit")
+async def release_credit_order(
+    order_id: str,
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Super Admin releases credit order from pending to manage"""
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    if not order.get('is_credit_order'):
+        raise HTTPException(status_code=400, detail="Order is not a credit order")
+    
+    # Move order to active/manage orders
+    await db.orders.update_one(
+        {"id": order_id},
+        {"$set": {
+            "lifecycle_status": "active",
+            "status": "confirmed",
+            "credit_released_by": current_user.id,
+            "credit_released_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    return {"message": "Credit order released to manage orders"}
+
+@api_router.get("/orders/credit-pending")
+async def get_credit_pending_orders(
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Get all credit orders pending release"""
+    orders = await db.orders.find({
+        "is_credit_order": True,
+        "lifecycle_status": "pending_payment"
+    }, {"_id": 0}).to_list(1000)
+    return orders
+
+
 
 # ==================== OUTLET MANAGEMENT (Super Admin) ====================
 
