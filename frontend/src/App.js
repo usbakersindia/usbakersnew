@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate as RouterNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import Login from './pages/Login';
@@ -19,6 +19,8 @@ import Reports from './pages/Reports';
 import PermissionManagement from './pages/PermissionManagement';
 import PetPoojaSettings from './pages/PetPoojaSettings';
 import SalesPersonManagement from './pages/SalesPersonManagement';
+import PetPoojaSync from './pages/PetPoojaSync';
+import NavigatePage from './pages/Navigate';
 import '@/App.css';
 
 const AppRoutes = () => {
@@ -44,7 +46,7 @@ const AppRoutes = () => {
     <Routes>
       <Route
         path="/login"
-        element={isAuthenticated ? <Navigate to={getDefaultRoute()} replace /> : <Login />}
+        element={isAuthenticated ? <RouterNavigate to={getDefaultRoute()} replace /> : <Login />}
       />
       <Route
         path="/dashboard"
@@ -183,8 +185,24 @@ const AppRoutes = () => {
         }
       />
       <Route
+        path="/petpooja-sync"
+        element={
+          <ProtectedRoute allowedRoles={['super_admin']}>
+            <PetPoojaSync />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/navigate"
+        element={
+          <ProtectedRoute allowedRoles={['super_admin']}>
+            <NavigatePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/"
-        element={<Navigate to={isAuthenticated ? getDefaultRoute() : '/login'} replace />}
+        element={<RouterNavigate to={isAuthenticated ? getDefaultRoute() : '/login'} replace />}
       />
     </Routes>
   );
