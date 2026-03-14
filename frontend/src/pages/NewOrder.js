@@ -193,12 +193,6 @@ const NewOrder = () => {
     setFormData({ ...formData, secondary_images: newImages });
   };
 
-  const handleSubmit = async (e, isPunchOrder = false) => {
-    e.preventDefault();
-    
-    // Validate for punch orders
-    if (isPunchOrder) {
-
   // Voice Recording Functions
   const startRecording = async () => {
     try {
@@ -260,6 +254,11 @@ const NewOrder = () => {
     }
   };
 
+  const handleSubmit = async (e, isPunchOrder = false) => {
+    e.preventDefault();
+    
+    // Validate for punch orders
+    if (isPunchOrder) {
       const errors = [];
       if (!formData.customer_info.name) errors.push('Customer name');
       if (!formData.customer_info.phone) errors.push('Customer phone');

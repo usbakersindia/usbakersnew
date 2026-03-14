@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, UploadFile, File
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, UploadFile, File, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
@@ -1030,6 +1030,7 @@ async def create_flavour(
     doc['created_at'] = doc['created_at'].isoformat()
     
     await db.cake_flavours.insert_one(doc)
+    doc.pop('_id', None)  # Remove MongoDB ObjectId before returning
     return {"message": "Flavour created successfully", "flavour": doc}
 
 @api_router.get("/flavours")
@@ -1071,6 +1072,7 @@ async def create_occasion(
     doc['created_at'] = doc['created_at'].isoformat()
     
     await db.occasions.insert_one(doc)
+    doc.pop('_id', None)  # Remove MongoDB ObjectId before returning
     return {"message": "Occasion created successfully", "occasion": doc}
 
 @api_router.get("/occasions")
@@ -1112,6 +1114,7 @@ async def create_time_slot(
     doc['created_at'] = doc['created_at'].isoformat()
     
     await db.delivery_time_slots.insert_one(doc)
+    doc.pop('_id', None)  # Remove MongoDB ObjectId before returning
     return {"message": "Time slot created successfully", "time_slot": doc}
 
 @api_router.get("/time-slots")
@@ -2494,12 +2497,15 @@ async def petpooja_payment_webhook(request_data: Dict[str, Any]):
         return {"success": False, "message": str(e)}
 
 @api_router.get("/petpooja/webhook-url")
-async def get_petpooja_webhook_url(current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))):
+async def get_petpooja_webhook_url(
+    request: Request,
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
     """Get the PetPooja webhook URLs to provide to PetPooja team"""
-    # Get the actual backend URL from environment
-    backend_url = os.environ.get('BACKEND_URL', os.environ.get('REACT_APP_BACKEND_URL', 'http://localhost:8001'))
-    callback_url = f"{backend_url}/api/petpooja/callback"
-    payment_url = f"{backend_url}/api/petpooja/payment-webhook"
+    # Dynamically construct the base URL from the request
+    base_url = str(request.base_url).rstrip('/')
+    callback_url = f"{base_url}/api/petpooja/callback"
+    payment_url = f"{base_url}/api/petpooja/payment-webhook"
     
     return {
         "payment_webhook_url": payment_url,

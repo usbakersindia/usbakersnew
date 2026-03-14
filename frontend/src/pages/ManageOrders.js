@@ -25,7 +25,8 @@ import {
   Search,
   ArrowRightLeft,
   Ban,
-  Download
+  Download,
+  Image as ImageIcon
 } from 'lucide-react';
 import axios from 'axios';
 import * as XLSX from 'xlsx';
@@ -77,6 +78,8 @@ const ManageOrders = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [transferDialogOpen, setTransferDialogOpen] = useState(false);
+  const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
+  const [previewImage, setPreviewImage] = useState('');
   const [outlets, setOutlets] = useState([]);
   const [message, setMessage] = useState({ type: '', text: '' });
   
@@ -561,6 +564,7 @@ const ManageOrders = () => {
                       <TableRow>
                         <TableHead>Order #</TableHead>
                         <TableHead>Customer</TableHead>
+                        <TableHead>Cake Photo</TableHead>
                         <TableHead>Delivery</TableHead>
                         <TableHead>Details</TableHead>
                         <TableHead>Payment</TableHead>
@@ -592,6 +596,28 @@ const ManageOrders = () => {
                                 <div className="font-medium">{order.customer_info?.name}</div>
                                 <div className="text-sm text-gray-500">{order.customer_info?.phone}</div>
                               </div>
+                            </TableCell>
+                            <TableCell>
+                              {order.cake_image_url ? (
+                                <div 
+                                  className="cursor-pointer hover:opacity-80 transition-opacity"
+                                  onClick={() => {
+                                    setPreviewImage(`${API_URL}${order.cake_image_url}`);
+                                    setImagePreviewOpen(true);
+                                  }}
+                                  title="Click to preview"
+                                >
+                                  <img
+                                    src={`${API_URL}${order.cake_image_url}`}
+                                    alt="Cake"
+                                    className="w-12 h-12 object-cover rounded border-2 border-gray-200"
+                                  />
+                                </div>
+                              ) : (
+                                <div className="w-12 h-12 bg-gray-100 rounded flex items-center justify-center">
+                                  <ImageIcon className="h-5 w-5 text-gray-400" />
+                                </div>
+                              )}
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center space-x-1 text-sm">
@@ -694,10 +720,44 @@ const ManageOrders = () => {
                     </TableBody>
                   </Table>
                 </div>
+
+                {/* Status Legend */}
+                <div className="mt-6 p-4 bg-gray-50 rounded-lg border">
+                  <h4 className="font-semibold mb-3 text-sm text-gray-700">Status Legend</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {Object.entries(STATUS_CONFIG).map(([key, config]) => {
+                      const Icon = config.icon;
+                      return (
+                        <div key={key} className="flex items-center space-x-2">
+                          <div className={`${config.color} w-8 h-8 rounded flex items-center justify-center`}>
+                            {Icon && <Icon className="h-4 w-4 text-white" />}
+                          </div>
+                          <span className="text-sm">{config.label}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Image Preview Dialog */}
+        <Dialog open={imagePreviewOpen} onOpenChange={setImagePreviewOpen}>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>Cake Photo Preview</DialogTitle>
+            </DialogHeader>
+            <div className="flex items-center justify-center bg-gray-100 rounded-lg p-4">
+              <img
+                src={previewImage}
+                alt="Cake Preview"
+                className="max-w-full max-h-[70vh] object-contain rounded"
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Order Details Dialog */}
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

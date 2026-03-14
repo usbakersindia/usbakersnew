@@ -13,19 +13,38 @@ const API = `${BACKEND_URL}/api`;
 
 const IncentiveReport = () => {
   const [orders, setOrders] = useState([]);
+  const [salesPersons, setSalesPersons] = useState([]);
   const [incentiveData, setIncentiveData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [totalIncentive, setTotalIncentive] = useState(0);
 
   useEffect(() => {
-    fetchOrders();
+    fetchSalesPersons();
   }, []);
+
+  useEffect(() => {
+    if (salesPersons.length > 0) {
+      fetchOrders();
+    }
+  }, [salesPersons]);
+
+  const fetchSalesPersons = async () => {
+    const token = localStorage.getItem('token');
+    try {
+      const response = await axios.get(`${API}/sales-persons`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setSalesPersons(response.data);
+    } catch (error) {
+      console.error('Failed to fetch sales persons:', error);
+    }
+  };
 
   const fetchOrders = async () => {
     const token = localStorage.getItem('token');
     setLoading(true);
     try {
-      const response = await axios.get(`${API}/orders`, {
+      const response = await axios.get(`${API}/orders/manage`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
@@ -35,22 +54,25 @@ const IncentiveReport = () => {
         incentive_amount: order.total_amount * 0.01
       }));
 
-      // Group by order_taken_by (sales person name)
+      // Group by order_taken_by (sales person ID)
       const grouped = ordersWithIncentive.reduce((acc, order) => {
-        const takenBy = order.order_taken_by || 'Unknown';
-        if (!acc[takenBy]) {
-          acc[takenBy] = {
-            name: takenBy,
+        const takenById = order.order_taken_by || 'Unknown';
+        if (!acc[takenById]) {
+          // Find sales person name from ID
+          const salesPerson = salesPersons.find(sp => sp.id === takenById);
+          acc[takenById] = {
+            id: takenById,
+            name: salesPerson ? salesPerson.name : takenById,
             orders_count: 0,
             total_sales: 0,
             total_incentive: 0,
             orders: []
           };
         }
-        acc[takenBy].orders_count += 1;
-        acc[takenBy].total_sales += order.total_amount;
-        acc[takenBy].total_incentive += order.total_amount * 0.01;
-        acc[takenBy].orders.push(order);
+        acc[takenById].orders_count += 1;
+        acc[takenById].total_sales += order.total_amount;
+        acc[takenById].total_incentive += order.total_amount * 0.01;
+        acc[takenById].orders.push(order);
         return acc;
       }, {});
 
