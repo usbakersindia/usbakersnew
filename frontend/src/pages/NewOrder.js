@@ -23,6 +23,9 @@ const NewOrder = () => {
   const [outlets, setOutlets] = useState([]);
   const [zones, setZones] = useState([]);
   const [salesPersons, setSalesPersons] = useState([]);
+  const [flavours, setFlavours] = useState([]);
+  const [occasions, setOccasions] = useState([]);
+  const [timeSlots, setTimeSlots] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -51,11 +54,13 @@ const NewOrder = () => {
     secondary_images: [],
     name_on_cake: '',
     special_instructions: '',
+    voice_instruction_url: '',
     delivery_date: '',
     delivery_time: '',
     outlet_id: user?.outlet_id || '', // Auto-fetch from logged-in user
     order_taken_by: '',
-    total_amount: 0
+    total_amount: 0,
+    is_credit_order: false
   });
 
   useEffect(() => {
@@ -67,6 +72,9 @@ const NewOrder = () => {
 
   useEffect(() => {
     fetchOutlets();
+    fetchFlavours();
+    fetchOccasions();
+    fetchTimeSlots();
     if (user?.outlet_id) {
       fetchSalesPersons(user.outlet_id);
     }
@@ -117,6 +125,34 @@ const NewOrder = () => {
       console.error('Failed to fetch sales persons:', error);
     }
   };
+
+  const fetchFlavours = async () => {
+    try {
+      const response = await axios.get(`${API}/flavours`);
+      setFlavours(response.data);
+    } catch (error) {
+      console.error('Failed to fetch flavours:', error);
+    }
+  };
+
+  const fetchOccasions = async () => {
+    try {
+      const response = await axios.get(`${API}/occasions`);
+      setOccasions(response.data);
+    } catch (error) {
+      console.error('Failed to fetch occasions:', error);
+    }
+  };
+
+  const fetchTimeSlots = async () => {
+    try {
+      const response = await axios.get(`${API}/time-slots`);
+      setTimeSlots(response.data);
+    } catch (error) {
+      console.error('Failed to fetch time slots:', error);
+    }
+  };
+
 
   const handleImageUpload = async (e, type = 'primary') => {
     const file = e.target.files[0];
@@ -532,22 +568,32 @@ const NewOrder = () => {
                       <SelectValue placeholder="Select occasion" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Birthday">Birthday</SelectItem>
-                      <SelectItem value="Anniversary">Anniversary</SelectItem>
-                      <SelectItem value="Wedding">Wedding</SelectItem>
-                      <SelectItem value="Other">Other</SelectItem>
+                      {occasions.map((occasion) => (
+                        <SelectItem key={occasion.id} value={occasion.name}>
+                          {occasion.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
                   <Label>Flavour *</Label>
-                  <Input
+                  <Select
                     required
                     value={formData.flavour}
-                    onChange={(e) => setFormData({ ...formData, flavour: e.target.value })}
-                    placeholder="e.g., Chocolate, Vanilla"
-                    data-testid="flavour-input"
-                  />
+                    onValueChange={(value) => setFormData({ ...formData, flavour: value })}
+                  >
+                    <SelectTrigger data-testid="flavour-select">
+                      <SelectValue placeholder="Select flavour" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {flavours.map((flavour) => (
+                        <SelectItem key={flavour.id} value={flavour.name}>
+                          {flavour.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <Label>Size (Pounds) *</Label>
@@ -602,14 +648,23 @@ const NewOrder = () => {
                   />
                 </div>
                 <div>
-                  <Label>Delivery Time *</Label>
-                  <Input
+                  <Label>Delivery Time Slot *</Label>
+                  <Select
                     required
-                    type="time"
                     value={formData.delivery_time}
-                    onChange={(e) => setFormData({ ...formData, delivery_time: e.target.value })}
-                    data-testid="delivery-time-input"
-                  />
+                    onValueChange={(value) => setFormData({ ...formData, delivery_time: value })}
+                  >
+                    <SelectTrigger data-testid="delivery-time-select">
+                      <SelectValue placeholder="Select time slot" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {timeSlots.map((slot) => (
+                        <SelectItem key={slot.id} value={slot.time_slot}>
+                          {slot.time_slot}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </CardContent>
@@ -692,6 +747,22 @@ const NewOrder = () => {
           </Card>
 
           <div className="flex justify-end space-x-4">
+
+          {/* Credit Order Checkbox - Super Admin Only */}
+          {user?.role === 'super_admin' && (
+            <div className="flex items-center space-x-2 mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <Switch
+                id="credit-order"
+                checked={formData.is_credit_order}
+                onCheckedChange={(checked) => setFormData({ ...formData, is_credit_order: checked })}
+              />
+              <Label htmlFor="credit-order" className="cursor-pointer">
+                <span className="font-semibold">Mark as Credit Order</span>
+                <p className="text-sm text-gray-600">Order will be released manually by Super Admin</p>
+              </Label>
+            </div>
+          )}
+
             <Button type="button" variant="outline" onClick={() => navigate('/dashboard')}>
               Cancel
             </Button>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
+import LayoutWithSidebar from '../components/LayoutWithSidebar';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -128,24 +129,20 @@ const PermissionManagement = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-lg">Loading...</div>
-      </div>
+      <LayoutWithSidebar>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-lg">Loading...</div>
+        </div>
+      </LayoutWithSidebar>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto">
+    <LayoutWithSidebar>
+      <div className="space-y-6">
         {/* Header */}
-        <div className="mb-6">
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="text-blue-600 hover:text-blue-800 mb-4"
-          >
-            ← Back to Dashboard
-          </button>
-          <h1 className="text-3xl font-bold text-gray-900">Permission Management</h1>
+        <div>
+          <h1 className="text-3xl font-bold" style={{ color: '#e92587' }}>Permission Management</h1>
           <p className="text-gray-600 mt-2">
             Configure default permissions for each role. These permissions will be automatically
             applied when creating new users.
@@ -263,7 +260,7 @@ const PermissionManagement = () => {
           </ul>
         </div>
       </div>
-    </div>
+    </LayoutWithSidebar>
   );
 };
 
