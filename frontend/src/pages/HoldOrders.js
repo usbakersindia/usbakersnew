@@ -191,16 +191,6 @@ const HoldOrders = () => {
                           </Button>
                           <Button
                             size="sm"
-                            onClick={() => openPaymentDialog(order)}
-                            className="text-white"
-                            style={{ backgroundColor: '#10b981' }}
-                            data-testid={`pay-order-${order.id}`}
-                          >
-                            <DollarSign className="h-4 w-4 mr-1" />
-                            Pay
-                          </Button>
-                          <Button
-                            size="sm"
                             onClick={() => handleDelete(order.id)}
                             variant="destructive"
                           >

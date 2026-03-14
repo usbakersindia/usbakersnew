@@ -21,6 +21,7 @@ import PetPoojaSettings from './pages/PetPoojaSettings';
 import SalesPersonManagement from './pages/SalesPersonManagement';
 import PetPoojaSync from './pages/PetPoojaSync';
 import NavigatePage from './pages/Navigate';
+import IncentiveReport from './pages/IncentiveReport';
 import '@/App.css';
 
 const AppRoutes = () => {
@@ -160,6 +161,15 @@ const AppRoutes = () => {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/incentive-report"
+        element={
+          <ProtectedRoute allowedRoles={['super_admin']}>
+            <IncentiveReport />
+          </ProtectedRoute>
+        }
+      />
+
       <Route
         path="/settings"
         element={
