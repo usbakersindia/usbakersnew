@@ -418,4 +418,9 @@ const KitchenDashboard = () => {
             </Card>
           </TabsContent>
         </Tabs>
+      </div>
+    </LayoutWithSidebar>
+  );
+};
+
 export default KitchenDashboard;
