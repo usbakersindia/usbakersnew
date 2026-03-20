@@ -1470,9 +1470,9 @@ async def upload_image(
 async def create_order(
     order_data: OrderCreate,
     is_punch_order: bool = False,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.OUTLET_ADMIN, UserRole.ORDER_MANAGER]))
 ):
-    """Create a new order (punch or hold)"""
+    """Create a new order (punch or hold) - Only for admins and order managers"""
     # Validate outlet exists
     outlet = await db.outlets.find_one({"id": order_data.outlet_id}, {"_id": 0})
     if not outlet:
@@ -1603,7 +1603,7 @@ async def get_pending_orders(
 async def release_hold_order(
     order_id: str,
     order_updates: Dict[str, Any],
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.OUTLET_ADMIN, UserRole.ORDER_MANAGER]))
 ):
     """Release a hold order by completing required info"""
     order = await db.orders.find_one({"id": order_id}, {"_id": 0})
@@ -1672,9 +1672,9 @@ async def get_manage_orders(
 @api_router.delete("/orders/{order_id}")
 async def delete_order(
     order_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.OUTLET_ADMIN, UserRole.ORDER_MANAGER]))
 ):
-    """Mark order as deleted (requires approval for non-super-admin)"""
+    """Mark order as deleted (requires approval for non-super-admin) - Only for admins and order managers"""
     order = await db.orders.find_one({"id": order_id}, {"_id": 0})
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -1698,7 +1698,7 @@ async def delete_order(
 async def update_order(
     order_id: str,
     update_data: Dict[str, Any],
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.OUTLET_ADMIN, UserRole.ORDER_MANAGER]))
 ):
     """Update order details (before ready status)"""
     order = await db.orders.find_one({"id": order_id}, {"_id": 0})
@@ -1795,7 +1795,7 @@ async def update_order_status(
 async def transfer_order(
     order_id: str,
     new_outlet_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.OUTLET_ADMIN]))
 ):
     """Transfer order to another outlet with all payment data"""
     # Check if user has permission
