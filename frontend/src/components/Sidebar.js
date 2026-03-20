@@ -2,7 +2,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { LayoutDashboard, ShoppingCart, Clock, Store, Users, MapPin, Settings, LogOut, Menu, X, MessageSquare, List, Receipt, Truck, CreditCard, RefreshCw, Navigation, TrendingUp } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Clock, Store, Users, MapPin, Settings, LogOut, Menu, X, MessageSquare, List, Receipt, Truck, CreditCard, RefreshCw, Navigation, TrendingUp, Webhook } from 'lucide-react';
 import { useState } from 'react';
 
 const Sidebar = () => {
@@ -33,6 +33,7 @@ const Sidebar = () => {
         { path: '/reports', label: 'Reports', icon: Receipt, testId: 'nav-reports' },
         { path: '/incentive-report', label: 'Incentive Report', icon: TrendingUp, testId: 'nav-incentive' },
         { path: '/petpooja-sync', label: 'PetPooja Sync', icon: RefreshCw, testId: 'nav-petpooja-sync' },
+        { path: '/petpooja-settings', label: 'PetPooja Settings', icon: Webhook, testId: 'nav-petpooja-settings' },
         { path: '/navigate', label: 'Navigate', icon: Navigation, testId: 'nav-navigate' },
         { path: '/settings', label: 'Settings', icon: Settings, testId: 'nav-settings' }
       ]
