@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CheckCircle, Clock, Filter } from 'lucide-react';
+import { CheckCircle, Clock, Filter, Download } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -126,6 +126,41 @@ const KitchenDashboard = () => {
       setLoading(false);
     }
   };
+
+  const downloadPDF = async (dateType) => {
+    try {
+      let date = '';
+      const today = new Date();
+      
+      if (dateType === 'today') {
+        date = today.toISOString().split('T')[0];
+      } else if (dateType === 'tomorrow') {
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        date = tomorrow.toISOString().split('T')[0];
+      } else {
+        // Custom date from filter
+        date = filters.date;
+      }
+      
+      const response = await axios.get(`${API}/orders/download-pdf?date=${date}`, {
+        responseType: 'blob'
+      });
+      
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `orders_${date}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error) {
+      console.error('Failed to download PDF:', error);
+      alert(error.response?.data?.detail || 'Failed to generate PDF');
+    }
+  };
+
 
   const generateBulkKOT = () => {
     if (selectedOrders.length === 0) {
@@ -257,7 +292,23 @@ const KitchenDashboard = () => {
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">Kitchen Dashboard</h1>
           <div className="flex gap-2">
-            <Button onClick={generateBulkKOT} disabled={selectedOrders.length === 0}>
+            <Button 
+              onClick={() => downloadPDF('today')} 
+              variant="outline"
+              className="border-pink-600 text-pink-600 hover:bg-pink-50"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              PDF Today
+            </Button>
+            <Button 
+              onClick={() => downloadPDF('tomorrow')} 
+              variant="outline"
+              className="border-pink-600 text-pink-600 hover:bg-pink-50"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              PDF Tomorrow
+            </Button>
+            <Button onClick={generateBulkKOT} disabled={selectedOrders.length === 0} variant="outline">
               Generate Bulk KOT ({selectedOrders.length})
             </Button>
             <Button 

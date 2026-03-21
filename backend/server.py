@@ -1,6 +1,7 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, UploadFile, File, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -16,6 +17,13 @@ import uuid
 import requests
 import random
 from pathlib import Path
+from io import BytesIO
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.pdfgen import canvas
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -1785,6 +1793,143 @@ async def update_order(
     await db.logs.insert_one(log_doc)
     
     return {"message": "Order updated successfully"}
+
+
+@api_router.get("/orders/download-pdf")
+async def download_orders_pdf(
+    date: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    outlet_id: Optional[str] = None,
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.FACTORY_MANAGER, UserRole.KITCHEN]))
+):
+    """Download orders as PDF for specified date range"""
+    try:
+        # Build query
+        query = {"is_deleted": False, "lifecycle_status": "active"}
+        
+        # Date filtering
+        if date:
+            # Single date (today/tomorrow/custom)
+            target_date = datetime.fromisoformat(date).date()
+            query["delivery_date"] = target_date.isoformat()
+        elif date_from and date_to:
+            # Date range
+            query["delivery_date"] = {
+                "$gte": datetime.fromisoformat(date_from).date().isoformat(),
+                "$lte": datetime.fromisoformat(date_to).date().isoformat()
+            }
+        
+        # Outlet filtering
+        if current_user.role == UserRole.SUPER_ADMIN or current_user.role == UserRole.FACTORY_MANAGER:
+            if outlet_id:
+                query["outlet_id"] = outlet_id
+        else:
+            if current_user.outlet_id:
+                query["outlet_id"] = current_user.outlet_id
+        
+        # Fetch orders sorted by delivery time
+        orders = await db.orders.find(query, {"_id": 0}).sort("delivery_time", 1).to_list(1000)
+        
+        if not orders:
+            raise HTTPException(status_code=404, detail="No orders found for the specified criteria")
+        
+        # Generate PDF
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=18)
+        
+        # Container for PDF elements
+        elements = []
+        styles = getSampleStyleSheet()
+        
+        # Title
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=24,
+            textColor=colors.HexColor('#e92587'),
+            spaceAfter=30,
+            alignment=1  # Center
+        )
+        
+        date_str = date if date else f"{date_from} to {date_to}" if date_from else "All Orders"
+        title = Paragraph(f"<b>US Bakers - Orders Report</b><br/><font size=12>{date_str}</font>", title_style)
+        elements.append(title)
+        elements.append(Spacer(1, 20))
+        
+        # Orders table
+        table_data = [['Order #', 'Customer', 'Cake Details', 'Delivery', 'Amount']]
+        
+        for order in orders:
+            order_number = order.get('order_number', 'N/A')
+            customer_name = order.get('customer_info', {}).get('name', 'N/A')
+            customer_phone = order.get('customer_info', {}).get('phone', 'N/A')
+            
+            flavour = order.get('flavour', 'N/A')
+            size = order.get('size_pounds', 0)
+            occasion = order.get('occasion', 'N/A')
+            cake_details = f"{flavour}<br/>{size} lbs<br/>{occasion}"
+            
+            delivery_date = order.get('delivery_date', 'N/A')
+            delivery_time = order.get('delivery_time', 'N/A')
+            delivery_info = f"{delivery_date}<br/>{delivery_time}"
+            
+            amount = f"₹{order.get('total_amount', 0):.2f}"
+            
+            table_data.append([
+                Paragraph(order_number, styles['Normal']),
+                Paragraph(f"<b>{customer_name}</b><br/>{customer_phone}", styles['Normal']),
+                Paragraph(cake_details, styles['Normal']),
+                Paragraph(delivery_info, styles['Normal']),
+                Paragraph(amount, styles['Normal'])
+            ])
+        
+        # Create table
+        table = Table(table_data, colWidths=[80, 120, 120, 100, 80])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e92587')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('FONTSIZE', (0, 1), (-1, -1), 9),
+        ]))
+        
+        elements.append(table)
+        elements.append(Spacer(1, 20))
+        
+        # Summary
+        total_amount = sum(order.get('total_amount', 0) for order in orders)
+        summary_text = f"<b>Total Orders:</b> {len(orders)} | <b>Total Amount:</b> ₹{total_amount:.2f}"
+        summary = Paragraph(summary_text, styles['Normal'])
+        elements.append(summary)
+        
+        # Build PDF
+        doc.build(elements)
+        
+        # Prepare response
+        buffer.seek(0)
+        filename = f"orders_{date if date else 'range'}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        
+        # Save to temp file for FileResponse
+        temp_path = f"/tmp/{filename}"
+        with open(temp_path, 'wb') as f:
+            f.write(buffer.getvalue())
+        
+        return FileResponse(
+            path=temp_path,
+            media_type='application/pdf',
+            filename=filename,
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+    
+    except Exception as e:
+        logger.error(f"PDF generation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {str(e)}")
 
 @api_router.patch("/orders/{order_id}/status")
 async def update_order_status(
