@@ -2522,6 +2522,224 @@ async def petpooja_payment_webhook(request_data: Dict[str, Any]):
         logger.error(f"PetPooja payment webhook error: {str(e)}")
         return {"success": False, "message": str(e)}
 
+@api_router.post("/petpooja/order-webhook")
+async def petpooja_order_webhook(request_data: Dict[str, Any]):
+    """
+    Main webhook endpoint for PetPooja orders
+    Handles: New orders, status updates, and general order data
+    This is the format PetPooja actually sends based on user's PHP testing
+    """
+    try:
+        logger.info(f"PetPooja order webhook received: {request_data}")
+        
+        # Store raw data for audit
+        from uuid import uuid4
+        from datetime import datetime, timezone
+        
+        # Detect webhook type
+        if 'order_id' in request_data:
+            # New order or order data
+            return await handle_petpooja_new_order(request_data)
+        elif 'orderId' in request_data and 'status' in request_data:
+            # Status update
+            return await handle_petpooja_status_update(request_data)
+        else:
+            # Unknown format - store for review
+            logger.warning(f"Unknown PetPooja webhook format: {request_data}")
+            bill_doc = {
+                "id": f"bill-{str(uuid4())[:8]}",
+                "bill_number": f"UNKNOWN-{int(datetime.now(timezone.utc).timestamp())}",
+                "bill_data": request_data,
+                "amount": 0,
+                "order_number": "UNKNOWN",
+                "payment_method": "unknown",
+                "synced_to_order": False,
+                "sync_error": "Unknown webhook format",
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.petpooja_bills.insert_one(bill_doc)
+            return {"success": True, "message": "Data saved for review"}
+            
+    except Exception as e:
+        logger.error(f"PetPooja order webhook error: {str(e)}")
+        return {"success": False, "message": str(e)}
+
+async def handle_petpooja_new_order(data: Dict[str, Any]):
+    """Handle new order data from PetPooja"""
+    from uuid import uuid4
+    from datetime import datetime, timezone
+    
+    petpooja_order_id = data.get('order_id', '')
+    customer_name = data.get('customer_name') or data.get('customerName', '')
+    customer_phone = data.get('customer_phone') or data.get('customerPhone', '')
+    status = data.get('order_status') or data.get('status', 'pending')
+    total_amount = float(data.get('total_amount') or data.get('totalAmount', 0))
+    
+    # Check if this order contains "Custom Cake" items
+    items = data.get('items', []) or data.get('orderItems', [])
+    has_custom_cake = False
+    custom_cake_details = []
+    
+    for item in items:
+        item_name = str(item.get('item_name', '') or item.get('itemName', '')).lower()
+        if 'custom cake' in item_name or 'customcake' in item_name or 'custom' in item_name:
+            has_custom_cake = True
+            custom_cake_details.append({
+                "name": item.get('item_name') or item.get('itemName', ''),
+                "quantity": item.get('quantity', 1),
+                "price": item.get('price', 0)
+            })
+    
+    # Store bill in petpooja_bills collection
+    bill_doc = {
+        "id": f"bill-{str(uuid4())[:8]}",
+        "bill_number": petpooja_order_id,
+        "bill_data": data,
+        "amount": total_amount,
+        "order_number": None,  # Will try to match
+        "payment_method": data.get('payment_method', 'cash'),
+        "synced_to_order": False,
+        "sync_error": None,
+        "has_custom_cake": has_custom_cake,
+        "custom_cake_details": custom_cake_details,
+        "customer_name": customer_name,
+        "customer_phone": customer_phone,
+        "petpooja_status": status,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    # Only process if it has custom cake
+    if not has_custom_cake:
+        bill_doc["sync_error"] = "No custom cake items found"
+        await db.petpooja_bills.insert_one(bill_doc)
+        logger.info(f"PetPooja order {petpooja_order_id} has no custom cake - skipped")
+        return {"success": True, "message": "Order saved but no custom cake found"}
+    
+    # Try to find matching order in our CRM by phone number
+    matching_orders = []
+    if customer_phone:
+        # Clean phone number
+        clean_phone = customer_phone.replace('+91', '').replace('-', '').replace(' ', '').strip()
+        
+        # Search for orders with matching phone from last 48 hours
+        two_days_ago = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
+        matching_orders = await db.orders.find({
+            "$or": [
+                {"customer_info.phone": {"$regex": clean_phone}},
+                {"customer_info.phone": customer_phone}
+            ],
+            "created_at": {"$gte": two_days_ago},
+            "$or": [
+                {"lifecycle_status": "pending_payment"},
+                {"lifecycle_status": "hold"}
+            ]
+        }, {"_id": 0}).to_list(10)
+    
+    if matching_orders:
+        # Found potential matches - use first one for now
+        order = matching_orders[0]
+        
+        # Record payment
+        payment = Payment(
+            order_id=order['id'],
+            amount=total_amount,
+            payment_method=data.get('payment_method', 'cash'),
+            petpooja_bill_number=petpooja_order_id,
+            recorded_by="system"
+        )
+        
+        payment_doc = payment.model_dump()
+        payment_doc['paid_at'] = payment_doc['paid_at'].isoformat()
+        await db.payments.insert_one(payment_doc)
+        
+        # Update order
+        new_paid_amount = order.get('paid_amount', 0) + total_amount
+        
+        await db.orders.update_one(
+            {"id": order['id']},
+            {"$set": {
+                "paid_amount": new_paid_amount,
+                "pending_amount": order['total_amount'] - new_paid_amount,
+                "lifecycle_status": "active",
+                "status": OrderStatus.CONFIRMED,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }}
+        )
+        
+        bill_doc["synced_to_order"] = True
+        bill_doc["order_number"] = order['order_number']
+        bill_doc["order_id"] = order['id']
+        bill_doc["outlet_id"] = order.get('outlet_id')
+        
+        logger.info(f"PetPooja order {petpooja_order_id} matched to {order['order_number']}")
+        
+        await db.petpooja_bills.insert_one(bill_doc)
+        
+        return {
+            "success": True,
+            "message": "Order matched and synced",
+            "order_number": order['order_number'],
+            "matched": True
+        }
+    else:
+        # No match found - store for manual review
+        bill_doc["sync_error"] = "No matching order found - pending manual review"
+        await db.petpooja_bills.insert_one(bill_doc)
+        
+        logger.warning(f"PetPooja order {petpooja_order_id} - no matching CRM order found")
+        
+        return {
+            "success": True,
+            "message": "Order saved for manual review",
+            "matched": False
+        }
+
+async def handle_petpooja_status_update(data: Dict[str, Any]):
+    """Handle status update from PetPooja"""
+    from datetime import datetime, timezone
+    
+    petpooja_order_id = data.get('orderId', '')
+    new_status = data.get('status', '')
+    
+    logger.info(f"PetPooja status update: {petpooja_order_id} -> {new_status}")
+    
+    # Find bill in our system
+    bill = await db.petpooja_bills.find_one(
+        {"bill_number": petpooja_order_id},
+        {"_id": 0}
+    )
+    
+    if bill and bill.get('order_id'):
+        # Update our order status if needed
+        # Map PetPooja statuses to our statuses
+        status_map = {
+            "confirmed": OrderStatus.CONFIRMED,
+            "ready": OrderStatus.READY,
+            "dispatched": OrderStatus.OUT_FOR_DELIVERY,
+            "delivered": OrderStatus.DELIVERED,
+            "cancelled": OrderStatus.CANCELLED
+        }
+        
+        our_status = status_map.get(new_status.lower())
+        if our_status:
+            await db.orders.update_one(
+                {"id": bill['order_id']},
+                {"$set": {
+                    "status": our_status,
+                    "updated_at": datetime.now(timezone.utc).isoformat()
+                }}
+            )
+        
+        # Update bill status
+        await db.petpooja_bills.update_one(
+            {"bill_number": petpooja_order_id},
+            {"$set": {"petpooja_status": new_status}}
+        )
+        
+        return {"success": True, "message": "Status updated"}
+    
+    return {"success": True, "message": "Status update received"}
+
 @api_router.get("/petpooja/webhook-url")
 async def get_petpooja_webhook_url(
     request: Request,
