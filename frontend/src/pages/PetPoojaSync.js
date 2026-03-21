@@ -189,7 +189,7 @@ const PetPoojaSync = () => {
                           <div className="text-sm text-gray-500">{bill.customer_phone || 'N/A'}</div>
                         </div>
                       </TableCell>
-                      <TableCell>₹{bill.total_amount.toFixed(2)}</TableCell>
+                      <TableCell>₹{(bill.amount || bill.total_amount || 0).toFixed(2)}</TableCell>
                       <TableCell>
                         {bill.has_custom_cake ? (
                           <Badge className="bg-green-100 text-green-800">Yes</Badge>
