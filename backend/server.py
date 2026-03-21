@@ -2387,6 +2387,22 @@ async def petpooja_payment_webhook(request_data: Dict[str, Any]):
         # Extract our Order ID from comment (format: USB-20250305-001)
         order_id = comment.strip()
         
+        # Store the bill in petpooja_bills collection for tracking
+        from uuid import uuid4
+        from datetime import datetime, timezone
+        
+        bill_doc = {
+            "id": f"bill-{str(uuid4())[:8]}",
+            "bill_number": bill_number,
+            "bill_data": request_data,
+            "amount": amount,
+            "order_number": order_id,
+            "payment_method": payment_method,
+            "synced_to_order": False,
+            "sync_error": None,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        
         # Find order in our system by order_number or id
         order = await db.orders.find_one({
             "$or": [
@@ -2397,11 +2413,15 @@ async def petpooja_payment_webhook(request_data: Dict[str, Any]):
         
         if not order:
             logger.error(f"Order not found for ID: {order_id}")
+            bill_doc["sync_error"] = f"Order {order_id} not found"
+            await db.petpooja_bills.insert_one(bill_doc)
             return {"success": False, "message": f"Order {order_id} not found"}
         
         # Check if order is on hold
         if order.get('is_hold', False):
             logger.info(f"Order {order_id} is on hold, not syncing payment")
+            bill_doc["sync_error"] = "Order is on hold"
+            await db.petpooja_bills.insert_one(bill_doc)
             return {"success": False, "message": "Order is on hold"}
         
         # Record payment
@@ -2476,6 +2496,12 @@ async def petpooja_payment_webhook(request_data: Dict[str, Any]):
         await db.logs.insert_one(log_doc)
         
         logger.info(f"Payment synced for order {order_id}: ₹{amount}")
+        
+        # Mark bill as synced and store in petpooja_bills collection
+        bill_doc["synced_to_order"] = True
+        bill_doc["order_id"] = order['id']
+        bill_doc["outlet_id"] = order.get('outlet_id')
+        await db.petpooja_bills.insert_one(bill_doc)
         
         # Send WhatsApp notification for payment confirmation
         try:
