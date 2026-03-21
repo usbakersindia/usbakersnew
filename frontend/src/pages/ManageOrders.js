@@ -964,49 +964,6 @@ const ManageOrders = () => {
                 <Select
                   value={paymentForm.payment_method}
                   onValueChange={(value) => setPaymentForm({ ...paymentForm, payment_method: value })}
-
-        {/* Photo Upload Modal */}
-        <Dialog open={photoUploadModalOpen} onOpenChange={setPhotoUploadModalOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Upload Actual Cake Photo</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <p className="text-sm text-gray-600">
-                Upload a photo of the completed cake. This will trigger incentive calculation for the sales person.
-              </p>
-              <div>
-                <Label>Select Photo</Label>
-                <Input
-                  type="file"
-                  accept="image/*"
-                  onChange={handlePhotoSelect}
-                  className="cursor-pointer"
-                />
-              </div>
-              {photoPreview && (
-                <div>
-                  <Label>Preview</Label>
-                  <img
-                    src={photoPreview}
-                    alt="Preview"
-                    className="w-full rounded-lg border-2 border-gray-200 mt-2"
-                  />
-                </div>
-              )}
-              <Button
-                onClick={handlePhotoUpload}
-                disabled={!photoFile}
-                className="w-full"
-                style={{ backgroundColor: '#e92587' }}
-              >
-                <Upload className="h-4 w-4 mr-2" />
-                Upload Photo & Calculate Incentive
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-
                 >
                   <SelectTrigger className="mt-1">
                     <SelectValue />
@@ -1060,6 +1017,49 @@ const ManageOrders = () => {
                 </Select>
               </div>
             </div>
+
+        {/* Photo Upload Modal */}
+        <Dialog open={photoUploadModalOpen} onOpenChange={setPhotoUploadModalOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Upload Actual Cake Photo</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <p className="text-sm text-gray-600">
+                Upload a photo of the completed cake. This will trigger incentive calculation for the sales person.
+              </p>
+              <div>
+                <Label>Select Photo</Label>
+                <Input
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoSelect}
+                  className="cursor-pointer"
+                />
+              </div>
+              {photoPreview && (
+                <div>
+                  <Label>Preview</Label>
+                  <img
+                    src={photoPreview}
+                    alt="Preview"
+                    className="w-full rounded-lg border-2 border-gray-200 mt-2"
+                  />
+                </div>
+              )}
+              <Button
+                onClick={handlePhotoUpload}
+                disabled={!photoFile}
+                className="w-full"
+                style={{ backgroundColor: '#e92587' }}
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Upload Photo & Calculate Incentive
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
           </DialogContent>
         </Dialog>
       </div>
