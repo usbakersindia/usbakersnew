@@ -16,11 +16,6 @@ const Customers = () => {
   const [loading, setLoading] = useState(true);
   const [filterOutlet, setFilterOutlet] = useState('all');
 
-  useEffect(() => {
-    fetchCustomers();
-    fetchOutlets();
-  }, [filterOutlet]);
-
   const fetchCustomers = async () => {
     try {
       const url = filterOutlet === 'all' ? `${API}/customers` : `${API}/customers?outlet_id=${filterOutlet}`;
@@ -41,6 +36,18 @@ const Customers = () => {
       console.error('Failed to fetch outlets:', error);
     }
   };
+
+  // Fetch outlets once on mount
+  useEffect(() => {
+    fetchOutlets();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Fetch customers whenever filter changes
+  useEffect(() => {
+    fetchCustomers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterOutlet]);
 
   if (loading) {
     return (

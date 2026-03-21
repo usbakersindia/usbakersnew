@@ -443,6 +443,7 @@ class OrderCreate(BaseModel):
     outlet_id: str
     total_amount: float = 0.0
     is_credit_order: bool = False  # NEW
+    order_taken_by: Optional[str] = None  # For incentive tracking
 
 # Payment Models
 class Payment(BaseModel):
@@ -1522,7 +1523,7 @@ async def create_order(
         lifecycle_status=lifecycle_status,
         outlet_id=order_data.outlet_id,
         created_by=current_user.id,
-        order_taken_by=order_data.order_taken_by,
+        order_taken_by=order_data.order_taken_by or current_user.id,
         is_punch_order=is_punch_order,
         total_amount=total_amount,
         pending_amount=pending_amount,
