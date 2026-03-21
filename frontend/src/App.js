@@ -13,6 +13,7 @@ import PendingOrders from './pages/PendingOrders';
 import Customers from './pages/Customers';
 import MSG91Settings from './pages/MSG91Settings';
 import ManageOrders from './pages/ManageOrders';
+import Payments from './pages/Payments';
 import KitchenDashboard from './pages/KitchenDashboard';
 import DeliveryDashboard from './pages/DeliveryDashboard';
 import Reports from './pages/Reports';
@@ -86,6 +87,14 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute allowedRoles={['super_admin', 'outlet_admin', 'order_manager']}>
             <ManageOrders />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/payments"
+        element={
+          <ProtectedRoute allowedRoles={['super_admin', 'outlet_admin', 'order_manager']}>
+            <Payments />
           </ProtectedRoute>
         }
       />

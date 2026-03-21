@@ -2,7 +2,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { LayoutDashboard, ShoppingCart, Clock, Store, Users, MapPin, Settings, LogOut, Menu, X, MessageSquare, List, Receipt, Truck, CreditCard, RefreshCw, Navigation, TrendingUp, Webhook } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Clock, Store, Users, MapPin, Settings, LogOut, Menu, X, MessageSquare, List, Receipt, Truck, CreditCard, RefreshCw, Navigation, TrendingUp, Webhook, Wallet } from 'lucide-react';
 import { useState } from 'react';
 
 const Sidebar = () => {
@@ -24,6 +24,7 @@ const Sidebar = () => {
         { path: '/pending-orders', label: 'Pending Orders', icon: Clock, testId: 'nav-pending-orders' },
         { path: '/hold-orders', label: 'Hold Orders', icon: Clock, testId: 'nav-hold-orders' },
         { path: '/manage-orders', label: 'Manage Orders', icon: List, testId: 'nav-manage-orders' },
+        { path: '/payments', label: 'Payments', icon: Wallet, testId: 'nav-payments' },
         { path: '/customers', label: 'Customers', icon: Users, testId: 'nav-customers' },
         { path: '/outlets', label: 'Outlets', icon: Store, testId: 'nav-outlets' },
         { path: '/users', label: 'Users', icon: Users, testId: 'nav-users' },
@@ -55,6 +56,7 @@ const Sidebar = () => {
               { path: '/pending-orders', label: 'Pending Orders', icon: Clock, testId: 'nav-pending-orders' },
               { path: '/hold-orders', label: 'Hold Orders', icon: Clock, testId: 'nav-hold-orders' },
               { path: '/manage-orders', label: 'Manage Orders', icon: List, testId: 'nav-manage-orders' },
+              { path: '/payments', label: 'Payments', icon: Wallet, testId: 'nav-payments' },
               { path: '/customers', label: 'Customers', icon: Users, testId: 'nav-customers' },
               { path: '/reports', label: 'Reports', icon: Receipt, testId: 'nav-reports' },
             ]

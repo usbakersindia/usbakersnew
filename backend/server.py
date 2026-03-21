@@ -3078,6 +3078,56 @@ async def get_order_payments(
     
     return payments
 
+@api_router.get("/payments")
+async def get_all_payments(
+    outlet_id: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Get all payments with order details grouped by order"""
+    # Build query
+    order_query = {"is_deleted": False}
+    if outlet_id:
+        order_query["outlet_id"] = outlet_id
+    
+    # Get all orders that have payments
+    orders = await db.orders.find(order_query, {"_id": 0}).to_list(10000)
+    
+    # Get all payments
+    payments = await db.payments.find({}, {"_id": 0}).to_list(10000)
+    
+    # Group payments by order_id
+    payments_by_order = {}
+    for payment in payments:
+        order_id = payment['order_id']
+        if order_id not in payments_by_order:
+            payments_by_order[order_id] = []
+        payments_by_order[order_id].append(payment)
+    
+    # Build response with order details
+    result = []
+    for order in orders:
+        order_id = order['id']
+        order_payments = payments_by_order.get(order_id, [])
+        
+        if order_payments:  # Only include orders with payments
+            result.append({
+                "order_id": order_id,
+                "order_number": order.get('order_number'),
+                "customer_name": order.get('customer_info', {}).get('name'),
+                "customer_phone": order.get('customer_info', {}).get('phone'),
+                "total_amount": order.get('total_amount', 0),
+                "paid_amount": order.get('paid_amount', 0),
+                "pending_amount": order.get('pending_amount', 0),
+                "outlet_id": order.get('outlet_id'),
+                "created_at": order.get('created_at'),
+                "payments": order_payments
+            })
+    
+    # Sort by most recent first
+    result.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+    
+    return result
+
 # ==================== CUSTOMERS ENDPOINT ====================
 
 @api_router.get("/customers")
