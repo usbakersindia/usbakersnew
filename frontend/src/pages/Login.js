@@ -101,11 +101,6 @@ const Login = () => {
               {loading ? 'Logging in...' : 'Login'}
             </Button>
           </form>
-
-          <div className="mt-6 text-center text-sm text-gray-500">
-            <p>Default credentials:</p>
-            <p className="font-mono mt-1">admin@usbakers.com / admin123</p>
-          </div>
         </CardContent>
       </Card>
     </div>

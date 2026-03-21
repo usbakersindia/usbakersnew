@@ -1434,6 +1434,50 @@ async def get_zones(outlet_id: Optional[str] = None, current_user: User = Depend
     
     return zones
 
+@api_router.patch("/zones/{zone_id}/toggle-active")
+async def toggle_zone_active(
+    zone_id: str,
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Toggle zone active status (Super Admin only)"""
+    zone = await db.zones.find_one({"id": zone_id}, {"_id": 0})
+    if not zone:
+        raise HTTPException(status_code=404, detail="Zone not found")
+    
+    new_status = not zone.get('is_active', True)
+    
+    await db.zones.update_one(
+        {"id": zone_id},
+        {"$set": {"is_active": new_status}}
+    )
+    
+    return {
+        "message": f"Zone {'activated' if new_status else 'deactivated'} successfully",
+        "is_active": new_status
+    }
+
+@api_router.delete("/zones/{zone_id}")
+async def delete_zone(
+    zone_id: str,
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Delete a zone (Super Admin only)"""
+    zone = await db.zones.find_one({"id": zone_id}, {"_id": 0})
+    if not zone:
+        raise HTTPException(status_code=404, detail="Zone not found")
+    
+    # Check if zone is being used in any orders
+    orders_with_zone = await db.orders.find_one({"zone_id": zone_id, "is_deleted": False}, {"_id": 0})
+    if orders_with_zone:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete zone. It is being used in existing orders. You can mark it as inactive instead."
+        )
+    
+    await db.zones.delete_one({"id": zone_id})
+    
+    return {"message": "Zone deleted successfully"}
+
 # ==================== IMAGE UPLOAD ====================
 
 @api_router.post("/upload-image")

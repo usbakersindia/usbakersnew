@@ -9,7 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { MapPin } from 'lucide-react';
+import { MapPin, Power, Trash2 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -71,6 +72,34 @@ const ZoneManagement = () => {
       fetchZones();
     } catch (error) {
       setError(error.response?.data?.detail || 'Failed to create zone');
+    }
+  };
+
+  const handleToggleActive = async (zoneId, currentStatus) => {
+    try {
+      const response = await axios.patch(`${API}/zones/${zoneId}/toggle-active`);
+      setSuccess(response.data.message);
+      fetchZones();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (error) {
+      setError(error.response?.data?.detail || 'Failed to toggle zone status');
+      setTimeout(() => setError(''), 3000);
+    }
+  };
+
+  const handleDelete = async (zoneId, zoneName) => {
+    if (!window.confirm(`Are you sure you want to delete zone "${zoneName}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      await axios.delete(`${API}/zones/${zoneId}`);
+      setSuccess('Zone deleted successfully!');
+      fetchZones();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (error) {
+      setError(error.response?.data?.detail || 'Failed to delete zone');
+      setTimeout(() => setError(''), 3000);
     }
   };
 
@@ -227,6 +256,7 @@ const ZoneManagement = () => {
                     <TableHead>Zone Name</TableHead>
                     <TableHead>Delivery Charge</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -241,10 +271,32 @@ const ZoneManagement = () => {
                       </TableCell>
                       <TableCell>
                         {zone.is_active ? (
-                          <span className="text-green-600 font-medium">Active</span>
+                          <Badge className="bg-green-500 hover:bg-green-600">Active</Badge>
                         ) : (
-                          <span className="text-red-600 font-medium">Inactive</span>
+                          <Badge variant="destructive">Inactive</Badge>
                         )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant={zone.is_active ? "outline" : "default"}
+                            onClick={() => handleToggleActive(zone.id, zone.is_active)}
+                            className={zone.is_active ? "text-orange-600 border-orange-600 hover:bg-orange-50" : "bg-green-600 hover:bg-green-700"}
+                            title={zone.is_active ? "Mark as Inactive" : "Mark as Active"}
+                          >
+                            <Power className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleDelete(zone.id, zone.name)}
+                            className="text-red-600 border-red-600 hover:bg-red-50"
+                            title="Delete Zone"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
