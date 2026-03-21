@@ -3009,6 +3009,20 @@ async def record_payment(
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     
+    # Get payment threshold for this outlet
+    outlet_id = order.get('outlet_id')
+    threshold_percentage = 20.0  # Default
+    
+    # Try to get branch-specific threshold first
+    branch_threshold = await db.branch_payment_thresholds.find_one({"outlet_id": outlet_id}, {"_id": 0})
+    if branch_threshold:
+        threshold_percentage = branch_threshold.get('minimum_payment_percentage', 20.0)
+    else:
+        # Fall back to system-wide threshold
+        system_settings = await db.system_settings.find_one({"id": "system_settings"}, {"_id": 0})
+        if system_settings:
+            threshold_percentage = system_settings.get('minimum_payment_percentage', 20.0)
+    
     # Create payment record
     payment = Payment(
         order_id=payment_data.order_id,
@@ -3040,8 +3054,11 @@ async def record_payment(
             bill_numbers.append(payment_data.petpooja_bill_number)
             update_data['petpooja_bill_numbers'] = bill_numbers
     
-    # Check if payment is >= 40% of total, move to manage orders
-    if new_paid_amount >= (order['total_amount'] * 0.4):
+    # Check if payment meets the threshold percentage, move to manage orders
+    threshold_amount = order['total_amount'] * (threshold_percentage / 100)
+    moved_to_manage = new_paid_amount >= threshold_amount
+    
+    if moved_to_manage:
         update_data['is_hold'] = False
     
     await db.orders.update_one({"id": payment_data.order_id}, {"$set": update_data})
@@ -3061,7 +3078,9 @@ async def record_payment(
         "message": "Payment recorded successfully",
         "paid_amount": new_paid_amount,
         "pending_amount": new_pending_amount,
-        "moved_to_manage": new_paid_amount >= (order['total_amount'] * 0.4)
+        "threshold_percentage": threshold_percentage,
+        "threshold_amount": threshold_amount,
+        "moved_to_manage": moved_to_manage
     }
 
 @api_router.get("/payments/{order_id}")
