@@ -48,6 +48,7 @@ class UserRole(str, Enum):
     SUPER_ADMIN = "super_admin"
     OUTLET_ADMIN = "outlet_admin"
     ORDER_MANAGER = "order_manager"
+    FACTORY_MANAGER = "factory_manager"  # NEW: Can see all orders, add orders, download PDFs
     KITCHEN = "kitchen"
     DELIVERY = "delivery"
     ACCOUNTS = "accounts"
@@ -1515,7 +1516,7 @@ async def upload_image(
 async def create_order(
     order_data: OrderCreate,
     is_punch_order: bool = False,
-    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.OUTLET_ADMIN, UserRole.ORDER_MANAGER]))
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.OUTLET_ADMIN, UserRole.ORDER_MANAGER, UserRole.FACTORY_MANAGER]))
 ):
     """Create a new order (punch or hold) - Only for admins and order managers"""
     # Validate outlet exists
@@ -1698,9 +1699,10 @@ async def get_manage_orders(
     """Get all active orders in manage (not hold, not pending, not deleted)"""
     query = {"lifecycle_status": "active", "is_deleted": False}
     
-    # Filter by outlet if user is not super admin
-    if current_user.role != UserRole.SUPER_ADMIN and current_user.outlet_id:
-        query["outlet_id"] = current_user.outlet_id
+    # Factory Manager and Super Admin can see all orders
+    if current_user.role not in [UserRole.SUPER_ADMIN, UserRole.FACTORY_MANAGER]:
+        if current_user.outlet_id:
+            query["outlet_id"] = current_user.outlet_id
     elif outlet_id:
         query["outlet_id"] = outlet_id
     
