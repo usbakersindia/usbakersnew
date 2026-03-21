@@ -2502,8 +2502,15 @@ async def get_petpooja_webhook_url(
     current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
 ):
     """Get the PetPooja webhook URLs to provide to PetPooja team"""
-    # Dynamically construct the base URL from the request
-    base_url = str(request.base_url).rstrip('/')
+    # Get the actual domain from request headers or use base URL
+    forwarded_host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+    forwarded_proto = request.headers.get("x-forwarded-proto", "https")
+    
+    if forwarded_host and forwarded_host != "localhost:8001":
+        base_url = f"{forwarded_proto}://{forwarded_host}"
+    else:
+        base_url = str(request.base_url).rstrip('/')
+    
     callback_url = f"{base_url}/api/petpooja/callback"
     payment_url = f"{base_url}/api/petpooja/payment-webhook"
     
