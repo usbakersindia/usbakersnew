@@ -2368,12 +2368,37 @@ async def petpooja_callback(request_data: Dict[str, Any]):
 @api_router.post("/petpooja/payment-webhook")
 async def petpooja_payment_webhook(request_data: Dict[str, Any]):
     """
-    Webhook endpoint for PetPooja to send bill/payment data
-    This syncs payment from PetPooja POS to our CRM
-    Expected to receive: bill_number, amount, comment (containing our Order ID)
+    Universal webhook endpoint for PetPooja - handles multiple formats
+    Format 1: Payment data with order ID in comment field
+    Format 2: Full order data with customer info and items
+    Format 3: Status updates
     """
     try:
-        logger.info(f"PetPooja payment webhook received: {request_data}")
+        logger.info(f"PetPooja webhook received: {request_data}")
+        
+        # Detect which format we received
+        if 'order_id' in request_data and 'items' in request_data:
+            # Format 2: Full order data with items
+            logger.info("Detected: Full order data format")
+            return await handle_petpooja_new_order(request_data)
+        elif 'orderId' in request_data and 'status' in request_data and 'items' not in request_data:
+            # Format 3: Status update
+            logger.info("Detected: Status update format")
+            return await handle_petpooja_status_update(request_data)
+        else:
+            # Format 1: Payment/bill data with comment field
+            logger.info("Detected: Payment/bill format")
+            return await handle_petpooja_payment(request_data)
+            
+    except Exception as e:
+        logger.error(f"PetPooja webhook error: {str(e)}")
+        return {"success": False, "message": str(e)}
+
+async def handle_petpooja_payment(request_data: Dict[str, Any]):
+    """Handle payment/bill format with order ID in comment"""
+    try:
+        from uuid import uuid4
+        from datetime import datetime, timezone
         
         bill_number = request_data.get('bill_number') or request_data.get('billNo')
         amount = float(request_data.get('amount', 0) or request_data.get('totalAmount', 0))
@@ -2388,9 +2413,6 @@ async def petpooja_payment_webhook(request_data: Dict[str, Any]):
         order_id = comment.strip()
         
         # Store the bill in petpooja_bills collection for tracking
-        from uuid import uuid4
-        from datetime import datetime, timezone
-        
         bill_doc = {
             "id": f"bill-{str(uuid4())[:8]}",
             "bill_number": bill_number,
@@ -2517,9 +2539,8 @@ async def petpooja_payment_webhook(request_data: Dict[str, Any]):
             "amount": amount,
             "status": "confirmed"
         }
-    
     except Exception as e:
-        logger.error(f"PetPooja payment webhook error: {str(e)}")
+        logger.error(f"PetPooja payment handler error: {str(e)}")
         return {"success": False, "message": str(e)}
 
 @api_router.post("/petpooja/order-webhook")
