@@ -2372,12 +2372,17 @@ async def petpooja_payment_webhook(request_data: Dict[str, Any]):
     Format 1: Payment data with order ID in comment field
     Format 2: Full order data with customer info and items
     Format 3: Status updates
+    Format 4: PetPooja standard format (nested under properties)
     """
     try:
         logger.info(f"PetPooja webhook received: {request_data}")
         
         # Detect which format we received
-        if 'order_id' in request_data and 'items' in request_data:
+        if 'properties' in request_data and 'Order' in request_data.get('properties', {}):
+            # Format 4: PetPooja standard nested format
+            logger.info("Detected: PetPooja standard format (nested properties)")
+            return await handle_petpooja_standard_format(request_data)
+        elif 'order_id' in request_data and 'items' in request_data:
             # Format 2: Full order data with items
             logger.info("Detected: Full order data format")
             return await handle_petpooja_new_order(request_data)
@@ -2392,6 +2397,182 @@ async def petpooja_payment_webhook(request_data: Dict[str, Any]):
             
     except Exception as e:
         logger.error(f"PetPooja webhook error: {str(e)}")
+        return {"success": False, "message": str(e)}
+
+async def handle_petpooja_standard_format(request_data: Dict[str, Any]):
+    """Handle PetPooja's standard format with nested properties"""
+    try:
+        from uuid import uuid4
+        from datetime import datetime, timezone
+        
+        properties = request_data.get('properties', {})
+        order_data = properties.get('Order', {})
+        customer_data = properties.get('Customer', {})
+        restaurant_data = properties.get('Restaurant', {})
+        order_items = properties.get('OrderItem', [])
+        
+        # Extract order information
+        petpooja_order_id = str(order_data.get('orderID', ''))
+        customer_name = customer_data.get('name', '')
+        customer_phone = customer_data.get('phone', '')
+        total_amount = float(order_data.get('total', 0))
+        payment_type = order_data.get('payment_type', 'cash')
+        custom_payment_type = order_data.get('custom_payment_type', '')
+        order_type = order_data.get('order_type', '')
+        created_on = order_data.get('created_on', '')
+        comment = order_data.get('comment', '')
+        
+        logger.info(f"PetPooja Order: {petpooja_order_id}, Customer: {customer_phone}, Amount: {total_amount}")
+        
+        # Check if order contains cake items
+        has_custom_cake = False
+        custom_cake_details = []
+        
+        for item in order_items:
+            item_name = str(item.get('name', '')).lower()
+            category = str(item.get('category_name', '')).lower()
+            
+            # Check if item is a cake/pastry (including category check)
+            if any(keyword in item_name for keyword in ['cake', 'pastry', 'pasteries', 'forest', 'truffle']) or \
+               any(keyword in category for keyword in ['cake', 'pastry', 'pasteries', 'pastries']):
+                has_custom_cake = True
+                custom_cake_details.append({
+                    "name": item.get('name', ''),
+                    "category": item.get('category_name', ''),
+                    "quantity": item.get('quantity', 1),
+                    "price": item.get('price', 0),
+                    "total": item.get('total', 0)
+                })
+        
+        # Store bill in petpooja_bills collection
+        bill_doc = {
+            "id": f"bill-{str(uuid4())[:8]}",
+            "bill_number": petpooja_order_id,
+            "bill_data": request_data,
+            "amount": total_amount,
+            "order_number": None,  # Will try to match
+            "payment_method": custom_payment_type or payment_type,
+            "synced_to_order": False,
+            "sync_error": None,
+            "has_custom_cake": has_custom_cake,
+            "custom_cake_details": custom_cake_details,
+            "customer_name": customer_name,
+            "customer_phone": customer_phone,
+            "petpooja_status": order_data.get('status', ''),
+            "order_type": order_type,
+            "comment": comment,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "petpooja_created_on": created_on
+        }
+        
+        # Only process if it has cake/pastry items
+        if not has_custom_cake:
+            bill_doc["sync_error"] = "No cake/pastry items found"
+            await db.petpooja_bills.insert_one(bill_doc)
+            logger.info(f"PetPooja order {petpooja_order_id} has no cake items - skipped")
+            return {"success": True, "message": "Order saved but no cake items found"}
+        
+        logger.info(f"PetPooja order {petpooja_order_id} has cake items: {[d['name'] for d in custom_cake_details]}")
+        
+        # Try to find matching order in our CRM
+        matching_orders = []
+        
+        # Strategy 1: If comment field has our order ID
+        if comment and comment.strip():
+            order_id_from_comment = comment.strip()
+            matching_order = await db.orders.find_one({
+                "$or": [
+                    {"order_number": order_id_from_comment},
+                    {"id": order_id_from_comment}
+                ]
+            }, {"_id": 0})
+            if matching_order:
+                matching_orders.append(matching_order)
+                logger.info(f"Matched by comment field: {order_id_from_comment}")
+        
+        # Strategy 2: Match by phone number (if no comment match)
+        if not matching_orders and customer_phone:
+            # Clean phone number
+            clean_phone = customer_phone.replace('+91', '').replace('-', '').replace(' ', '').strip()
+            
+            if clean_phone and clean_phone != '1111111111':  # Skip dummy phone
+                # Search for orders with matching phone from last 48 hours
+                two_days_ago = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
+                matching_orders = await db.orders.find({
+                    "$or": [
+                        {"customer_info.phone": {"$regex": clean_phone}},
+                        {"customer_info.phone": customer_phone}
+                    ],
+                    "created_at": {"$gte": two_days_ago},
+                    "lifecycle_status": {"$in": ["pending_payment", "hold", "active"]}
+                }, {"_id": 0}).to_list(10)
+                
+                if matching_orders:
+                    logger.info(f"Found {len(matching_orders)} potential matches by phone: {clean_phone}")
+        
+        if matching_orders:
+            # Found match - sync payment
+            order = matching_orders[0]
+            
+            # Record payment
+            payment = Payment(
+                order_id=order['id'],
+                amount=total_amount,
+                payment_method=custom_payment_type or payment_type,
+                petpooja_bill_number=petpooja_order_id,
+                recorded_by="system"
+            )
+            
+            payment_doc = payment.model_dump()
+            payment_doc['paid_at'] = payment_doc['paid_at'].isoformat()
+            await db.payments.insert_one(payment_doc)
+            
+            # Update order
+            new_paid_amount = order.get('paid_amount', 0) + total_amount
+            
+            await db.orders.update_one(
+                {"id": order['id']},
+                {"$set": {
+                    "paid_amount": new_paid_amount,
+                    "pending_amount": order['total_amount'] - new_paid_amount,
+                    "lifecycle_status": "active",
+                    "status": OrderStatus.CONFIRMED,
+                    "updated_at": datetime.now(timezone.utc).isoformat()
+                }}
+            )
+            
+            bill_doc["synced_to_order"] = True
+            bill_doc["order_number"] = order['order_number']
+            bill_doc["order_id"] = order['id']
+            bill_doc["outlet_id"] = order.get('outlet_id')
+            
+            logger.info(f"PetPooja order {petpooja_order_id} matched to {order['order_number']}")
+            
+            await db.petpooja_bills.insert_one(bill_doc)
+            
+            return {
+                "success": True,
+                "message": "Order matched and synced",
+                "order_number": order['order_number'],
+                "matched": True
+            }
+        else:
+            # No match found - store for manual review
+            bill_doc["sync_error"] = "No matching order found - pending manual review"
+            await db.petpooja_bills.insert_one(bill_doc)
+            
+            logger.warning(f"PetPooja order {petpooja_order_id} - no matching CRM order found")
+            
+            return {
+                "success": True,
+                "message": "Order saved for manual review - no matching CRM order found",
+                "matched": False,
+                "petpooja_order_id": petpooja_order_id,
+                "has_cake": has_custom_cake
+            }
+    
+    except Exception as e:
+        logger.error(f"PetPooja standard format handler error: {str(e)}")
         return {"success": False, "message": str(e)}
 
 async def handle_petpooja_payment(request_data: Dict[str, Any]):
