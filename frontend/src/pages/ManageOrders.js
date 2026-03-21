@@ -212,6 +212,9 @@ const ManageOrders = () => {
   };
 
   const handleViewOrder = (order) => {
+    setSelectedOrder(order);
+    setDialogOpen(true);
+  };
 
   const openPhotoUploadModal = (order) => {
     if (!order.is_ready) {
@@ -277,10 +280,6 @@ const ManageOrders = () => {
       console.error('Failed to upload photo:', error);
       setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to upload photo' });
     }
-  };
-
-    setSelectedOrder(order);
-    setDialogOpen(true);
   };
 
   const handleAddPayment = (order) => {
