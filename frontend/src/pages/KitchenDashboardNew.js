@@ -21,12 +21,8 @@ const KitchenDashboardNew = () => {
   const [loading, setLoading] = useState(true);
   const [autoRefresh, setAutoRefresh] = useState(true);
   
-  // Modal states
   const [markReadyModalOpen, setMarkReadyModalOpen] = useState(false);
-  const [photoUploadModalOpen, setPhotoUploadModalOpen] = useState(false);
   const [selectedOutlet, setSelectedOutlet] = useState('');
-  const [photoFile, setPhotoFile] = useState(null);
-  const [photoPreview, setPhotoPreview] = useState(null);
   
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
@@ -101,6 +97,10 @@ const KitchenDashboardNew = () => {
 
   const handleMarkReady = () => {
     if (!currentOrder) return;
+    if (currentOrder.is_ready) {
+      setError('Order is already marked as ready');
+      return;
+    }
     setMarkReadyModalOpen(true);
   };
 
@@ -111,66 +111,19 @@ const KitchenDashboardNew = () => {
     }
 
     try {
-      await axios.patch(`${API}/orders/${currentOrder.id}/status`, {
-        status: 'ready'
-      });
-      
-      await axios.patch(`${API}/orders/${currentOrder.id}`, {
-        transfer_to_outlet_id: selectedOutlet
-      });
+      // Kitchen only marks ready - photo upload done by counter person later
+      await axios.post(`${API}/orders/${currentOrder.id}/mark-ready?transfer_to_outlet_id=${selectedOutlet}`);
 
       setMarkReadyModalOpen(false);
-      setPhotoUploadModalOpen(true);
-      setSuccess('Order marked as ready! Please upload cake photo.');
-    } catch (error) {
-      console.error('Failed to mark order as ready:', error);
-      setError('Failed to mark order as ready');
-    }
-  };
-
-  const handlePhotoUpload = async () => {
-    if (!photoFile) {
-      setError('Please select a photo to upload');
-      return;
-    }
-
-    try {
-      const formData = new FormData();
-      formData.append('file', photoFile);
-
-      const uploadResponse = await axios.post(`${API}/upload-image`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-
-      const imageUrl = uploadResponse.data.url;
-
-      await axios.patch(`${API}/orders/${currentOrder.id}`, {
-        actual_cake_image_url: imageUrl
-      });
-
-      setPhotoUploadModalOpen(false);
-      setPhotoFile(null);
-      setPhotoPreview(null);
-      setSuccess('Photo uploaded successfully! Incentive will be calculated.');
+      setSelectedOutlet('');
+      setSuccess('Order marked as ready and transferred! Counter person will upload photo.');
       
       fetchOrders();
-      
-      setTimeout(() => setSuccess(''), 3000);
+      setTimeout(() => setSuccess(''), 5000);
     } catch (error) {
-      console.error('Failed to upload photo:', error);
-      setError('Failed to upload photo');
-    }
-  };
-
-  const handlePhotoSelect = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setPhotoFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPhotoPreview(reader.result);
-      };
-      reader.readAsDataURL(file);
+      console.error('Failed to mark order as ready:', error);
+      setError(error.response?.data?.detail || 'Failed to mark order as ready');
+      setTimeout(() => setError(''), 5000);
     }
   };
 
@@ -456,7 +409,7 @@ const KitchenDashboardNew = () => {
             <DialogHeader>
               <DialogTitle>Mark Order as Ready</DialogTitle>
               <DialogDescription>
-                Select the branch where this order will be transferred for pickup/delivery.
+                Select the branch where this order will be transferred. Counter person at that branch will upload the cake photo.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
@@ -476,49 +429,7 @@ const KitchenDashboardNew = () => {
                 </Select>
               </div>
               <Button onClick={confirmMarkReady} className="w-full" style={{ backgroundColor: '#e92587' }}>
-                Confirm & Continue to Photo Upload
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        {/* Photo Upload Modal */}
-        <Dialog open={photoUploadModalOpen} onOpenChange={setPhotoUploadModalOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Upload Actual Cake Photo</DialogTitle>
-              <DialogDescription>
-                Upload a photo of the completed cake. This is required for incentive calculation.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div>
-                <Label>Select Photo</Label>
-                <Input
-                  type="file"
-                  accept="image/*"
-                  onChange={handlePhotoSelect}
-                  className="cursor-pointer"
-                />
-              </div>
-              {photoPreview && (
-                <div>
-                  <Label>Preview</Label>
-                  <img
-                    src={photoPreview}
-                    alt="Preview"
-                    className="w-full rounded-lg border-2 border-gray-200 mt-2"
-                  />
-                </div>
-              )}
-              <Button
-                onClick={handlePhotoUpload}
-                disabled={!photoFile}
-                className="w-full"
-                style={{ backgroundColor: '#e92587' }}
-              >
-                <Upload className="h-4 w-4 mr-2" />
-                Upload Photo
+                Mark as Ready & Transfer
               </Button>
             </div>
           </DialogContent>

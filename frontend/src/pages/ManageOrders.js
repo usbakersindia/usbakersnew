@@ -26,6 +26,7 @@ import {
   ArrowRightLeft,
   Ban,
   Download,
+  Upload,
   Image as ImageIcon
 } from 'lucide-react';
 import axios from 'axios';
@@ -80,6 +81,10 @@ const ManageOrders = () => {
   const [transferDialogOpen, setTransferDialogOpen] = useState(false);
   const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
   const [previewImage, setPreviewImage] = useState('');
+  const [photoUploadModalOpen, setPhotoUploadModalOpen] = useState(false);
+  const [selectedOrderForPhoto, setSelectedOrderForPhoto] = useState(null);
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
   const [outlets, setOutlets] = useState([]);
   const [message, setMessage] = useState({ type: '', text: '' });
   
@@ -194,6 +199,73 @@ const ManageOrders = () => {
   };
 
   const handleViewOrder = (order) => {
+
+  const openPhotoUploadModal = (order) => {
+    if (!order.is_ready) {
+      setMessage({ type: 'error', text: 'Order must be marked as ready by kitchen first' });
+      return;
+    }
+    if (order.actual_cake_image_url) {
+      setMessage({ type: 'error', text: 'Photo already uploaded for this order' });
+      return;
+    }
+    setSelectedOrderForPhoto(order);
+    setPhotoUploadModalOpen(true);
+  };
+
+  const handlePhotoSelect = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setPhotoFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPhotoPreview(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handlePhotoUpload = async () => {
+    if (!photoFile) {
+      setMessage({ type: 'error', text: 'Please select a photo' });
+      return;
+    }
+
+    try {
+      // Step 1: Upload image file
+      const formData = new FormData();
+      formData.append('file', photoFile);
+
+      const uploadResponse = await axios.post(`${API_URL}/api/upload-image`, formData, {
+        headers: { 
+          'Content-Type': 'multipart/form-data',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      const imageUrl = uploadResponse.data.url;
+
+      // Step 2: Use specialized endpoint to save actual photo and trigger incentive
+      await axios.post(
+        `${API_URL}/api/orders/${selectedOrderForPhoto.id}/upload-actual-photo?image_url=${encodeURIComponent(imageUrl)}`,
+        {},
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+
+      setPhotoUploadModalOpen(false);
+      setPhotoFile(null);
+      setPhotoPreview(null);
+      setSelectedOrderForPhoto(null);
+      setMessage({ type: 'success', text: 'Photo uploaded successfully! Incentive calculated for sales person.' });
+      
+      fetchOrders();
+      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+    } catch (error) {
+      console.error('Failed to upload photo:', error);
+      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to upload photo' });
+    }
+  };
+
     setSelectedOrder(order);
     setDialogOpen(true);
   };
@@ -656,6 +728,19 @@ const ManageOrders = () => {
                             <TableCell>{getStatusBadge(order.status)}</TableCell>
                             <TableCell className="text-right">
                               <div className="flex justify-end space-x-2">
+                                {order.is_ready && !order.actual_cake_image_url && (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => openPhotoUploadModal(order)}
+                                    className="bg-purple-600 hover:bg-purple-700 text-white"
+                                    title="Upload Actual Cake Photo"
+                                  >
+                                    <Upload className="h-4 w-4" />
+                                  </Button>
+                                )}
+                                {order.actual_cake_image_url && (
+                                  <Badge className="bg-green-600 text-white">✓ Photo</Badge>
+                                )}
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -879,6 +964,49 @@ const ManageOrders = () => {
                 <Select
                   value={paymentForm.payment_method}
                   onValueChange={(value) => setPaymentForm({ ...paymentForm, payment_method: value })}
+
+        {/* Photo Upload Modal */}
+        <Dialog open={photoUploadModalOpen} onOpenChange={setPhotoUploadModalOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Upload Actual Cake Photo</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <p className="text-sm text-gray-600">
+                Upload a photo of the completed cake. This will trigger incentive calculation for the sales person.
+              </p>
+              <div>
+                <Label>Select Photo</Label>
+                <Input
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoSelect}
+                  className="cursor-pointer"
+                />
+              </div>
+              {photoPreview && (
+                <div>
+                  <Label>Preview</Label>
+                  <img
+                    src={photoPreview}
+                    alt="Preview"
+                    className="w-full rounded-lg border-2 border-gray-200 mt-2"
+                  />
+                </div>
+              )}
+              <Button
+                onClick={handlePhotoUpload}
+                disabled={!photoFile}
+                className="w-full"
+                style={{ backgroundColor: '#e92587' }}
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Upload Photo & Calculate Incentive
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
                 >
                   <SelectTrigger className="mt-1">
                     <SelectValue />
