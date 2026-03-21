@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import LayoutWithSidebar from '../components/LayoutWithSidebar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -8,13 +8,14 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { ChefHat, Clock, User, Calendar, Package, MessageSquare, Upload, CheckCircle, AlertCircle, Play, Volume2 } from 'lucide-react';
+import { ChefHat, Clock, User, Calendar, Package, MessageSquare, Upload, CheckCircle, AlertCircle, Play, Volume2, LogOut } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
 const KitchenDashboardNew = () => {
+  const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [currentOrder, setCurrentOrder] = useState(null);
   const [outlets, setOutlets] = useState([]);
@@ -26,6 +27,12 @@ const KitchenDashboardNew = () => {
   
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    navigate('/login');
+  };
 
   useEffect(() => {
     fetchOrders();
@@ -155,20 +162,20 @@ const KitchenDashboardNew = () => {
 
   if (loading) {
     return (
-      <LayoutWithSidebar>
+      <div className="min-h-screen bg-gray-50 p-4">
         <div className="flex items-center justify-center h-screen">
           <div className="text-center">
             <ChefHat className="h-12 w-12 mx-auto mb-4 text-pink-600 animate-pulse" />
             <p className="text-lg">Loading kitchen orders...</p>
           </div>
         </div>
-      </LayoutWithSidebar>
+      </div>
     );
   }
 
   if (orders.length === 0) {
     return (
-      <LayoutWithSidebar>
+      <div className="min-h-screen bg-gray-50 p-4">
         <div className="flex items-center justify-center h-screen">
           <Card className="max-w-md">
             <CardContent className="pt-6 text-center">
@@ -178,12 +185,12 @@ const KitchenDashboardNew = () => {
             </CardContent>
           </Card>
         </div>
-      </LayoutWithSidebar>
+      </div>
     );
   }
 
   return (
-    <LayoutWithSidebar>
+    <div className="min-h-screen bg-gray-50 p-4">
       <div className="h-screen flex flex-col">
         {/* Header */}
         <div className="flex justify-between items-center mb-4">
@@ -210,6 +217,15 @@ const KitchenDashboardNew = () => {
               onClick={fetchOrders}
             >
               Refresh Now
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleLogout}
+              className="flex items-center gap-2"
+            >
+              <LogOut className="h-4 w-4" />
+              Logout
             </Button>
           </div>
         </div>
@@ -388,7 +404,7 @@ const KitchenDashboardNew = () => {
             <Card className="h-full">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm">
-                  Upcoming Orders ({orders.length})
+                  Orders for Today ({orders.length})
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
@@ -456,7 +472,7 @@ const KitchenDashboardNew = () => {
           </DialogContent>
         </Dialog>
       </div>
-    </LayoutWithSidebar>
+    </div>
   );
 };
 
