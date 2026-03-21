@@ -602,13 +602,17 @@ const ManageOrders = () => {
                                 <div 
                                   className="cursor-pointer hover:opacity-80 transition-opacity"
                                   onClick={() => {
-                                    setPreviewImage(`${API_URL}${order.cake_image_url}`);
+                                    // Check if URL is already absolute
+                                    const imageUrl = order.cake_image_url.startsWith('http') 
+                                      ? order.cake_image_url 
+                                      : `${API_URL}${order.cake_image_url}`;
+                                    setPreviewImage(imageUrl);
                                     setImagePreviewOpen(true);
                                   }}
                                   title="Click to preview"
                                 >
                                   <img
-                                    src={`${API_URL}${order.cake_image_url}`}
+                                    src={order.cake_image_url.startsWith('http') ? order.cake_image_url : `${API_URL}${order.cake_image_url}`}
                                     alt="Cake"
                                     className="w-12 h-12 object-cover rounded border-2 border-gray-200"
                                   />
@@ -749,12 +753,20 @@ const ManageOrders = () => {
             <DialogHeader>
               <DialogTitle>Cake Photo Preview</DialogTitle>
             </DialogHeader>
-            <div className="flex items-center justify-center bg-gray-100 rounded-lg p-4">
-              <img
-                src={previewImage}
-                alt="Cake Preview"
-                className="max-w-full max-h-[70vh] object-contain rounded"
-              />
+            <div className="flex items-center justify-center bg-gray-100 rounded-lg p-4 min-h-[400px]">
+              {previewImage ? (
+                <img
+                  src={previewImage}
+                  alt="Cake Preview"
+                  className="max-w-full max-h-[70vh] object-contain rounded"
+                  onError={(e) => {
+                    console.error('Image failed to load:', previewImage);
+                    e.target.src = '/placeholder-image.png';
+                  }}
+                />
+              ) : (
+                <div className="text-gray-500">No image available</div>
+              )}
             </div>
           </DialogContent>
         </Dialog>

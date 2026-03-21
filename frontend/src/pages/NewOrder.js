@@ -833,7 +833,7 @@ const NewOrder = () => {
                       <button
                         type="button"
                         onClick={() => setFormData({ ...formData, cake_image_url: '' })}
-                        className="absolute top-0 right-0 bg-red-500 text-white rounded-full p-1"
+                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1.5 hover:bg-red-600 shadow-lg z-10 cursor-pointer transition-all"
                       >
                         <X className="h-4 w-4" />
                       </button>
@@ -867,7 +867,7 @@ const NewOrder = () => {
                       <button
                         type="button"
                         onClick={() => removeSecondaryImage(index)}
-                        className="absolute top-0 right-0 bg-red-500 text-white rounded-full p-1"
+                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1.5 hover:bg-red-600 shadow-lg z-10 cursor-pointer transition-all"
                       >
                         <X className="h-3 w-3" />
                       </button>
