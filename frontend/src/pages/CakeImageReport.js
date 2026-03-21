@@ -22,8 +22,8 @@ const CakeImageReport = () => {
   const [filters, setFilters] = useState({
     date_from: '',
     date_to: '',
-    outlet_id: '',
-    sales_person_id: ''
+    outlet_id: 'all',
+    sales_person_id: 'all'
   });
 
   useEffect(() => {
@@ -81,11 +81,11 @@ const CakeImageReport = () => {
       filtered = filtered.filter(order => order.delivery_date <= filters.date_to);
     }
 
-    if (filters.outlet_id) {
+    if (filters.outlet_id && filters.outlet_id !== 'all') {
       filtered = filtered.filter(order => order.outlet_id === filters.outlet_id);
     }
 
-    if (filters.sales_person_id) {
+    if (filters.sales_person_id && filters.sales_person_id !== 'all') {
       filtered = filtered.filter(order => order.order_taken_by === filters.sales_person_id);
     }
 
@@ -155,7 +155,7 @@ const CakeImageReport = () => {
                     <SelectValue placeholder="All Outlets" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Outlets</SelectItem>
+                    <SelectItem value="all">All Outlets</SelectItem>
                     {outlets.map((outlet) => (
                       <SelectItem key={outlet.id} value={outlet.id}>
                         {outlet.name}
@@ -171,7 +171,7 @@ const CakeImageReport = () => {
                     <SelectValue placeholder="All Sales Persons" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Sales Persons</SelectItem>
+                    <SelectItem value="all">All Sales Persons</SelectItem>
                     {salesPersons.map((sp) => (
                       <SelectItem key={sp.id} value={sp.id}>
                         {sp.name}
@@ -183,7 +183,7 @@ const CakeImageReport = () => {
             </div>
             <div className="mt-4">
               <Button
-                onClick={() => setFilters({ date_from: '', date_to: '', outlet_id: '', sales_person_id: '' })}
+                onClick={() => setFilters({ date_from: '', date_to: '', outlet_id: 'all', sales_person_id: 'all' })}
                 variant="outline"
               >
                 Clear Filters
