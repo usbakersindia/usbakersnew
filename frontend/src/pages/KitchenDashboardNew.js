@@ -46,17 +46,22 @@ const KitchenDashboardNew = () => {
 
   const fetchOrders = async () => {
     try {
+      const token = localStorage.getItem('token');
       const today = new Date().toISOString().split('T')[0];
-      const response = await axios.get(`${API}/orders/manage`);
       
-      // Filter today's orders and sort by delivery time
-      const todayOrders = response.data
-        .filter(order => order.delivery_date === today)
-        .sort((a, b) => {
-          const timeA = a.delivery_time || '23:59';
-          const timeB = b.delivery_time || '23:59';
-          return timeA.localeCompare(timeB);
-        });
+      // Use kitchen-specific endpoint with authentication
+      const response = await axios.get(`${API}/kitchen/orders`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      
+      // Orders are already filtered by date from backend, just sort by delivery time
+      const todayOrders = response.data.sort((a, b) => {
+        const timeA = a.delivery_time || '23:59';
+        const timeB = b.delivery_time || '23:59';
+        return timeA.localeCompare(timeB);
+      });
       
       setOrders(todayOrders);
       
@@ -78,13 +83,19 @@ const KitchenDashboardNew = () => {
       setLoading(false);
     } catch (error) {
       console.error('Failed to fetch orders:', error);
+      setError('Failed to load orders. Please try again.');
       setLoading(false);
     }
   };
 
   const fetchOutlets = async () => {
     try {
-      const response = await axios.get(`${API}/outlets`);
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${API}/outlets`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
       setOutlets(response.data);
     } catch (error) {
       console.error('Failed to fetch outlets:', error);
@@ -111,8 +122,18 @@ const KitchenDashboardNew = () => {
     }
 
     try {
+      const token = localStorage.getItem('token');
+      
       // Kitchen only marks ready - photo upload done by counter person later
-      await axios.post(`${API}/orders/${currentOrder.id}/mark-ready?transfer_to_outlet_id=${selectedOutlet}`);
+      await axios.post(
+        `${API}/orders/${currentOrder.id}/mark-ready?transfer_to_outlet_id=${selectedOutlet}`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
 
       setMarkReadyModalOpen(false);
       setSelectedOutlet('');
