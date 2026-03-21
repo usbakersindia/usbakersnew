@@ -24,6 +24,7 @@ import SalesPersonManagement from './pages/SalesPersonManagement';
 import PetPoojaSync from './pages/PetPoojaSync';
 import NavigatePage from './pages/Navigate';
 import IncentiveReport from './pages/IncentiveReport';
+import CakeImageReport from './pages/CakeImageReport';
 import '@/App.css';
 
 const AppRoutes = () => {
@@ -228,6 +229,15 @@ const AppRoutes = () => {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/cake-image-report"
+        element={
+          <ProtectedRoute allowedRoles={['super_admin', 'outlet_admin']}>
+            <CakeImageReport />
+          </ProtectedRoute>
+        }
+      />
+
       <Route
         path="/"
         element={<RouterNavigate to={isAuthenticated ? getDefaultRoute() : '/login'} replace />}

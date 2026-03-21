@@ -373,7 +373,8 @@ class Order(BaseModel):
     occasion: Optional[str] = None
     flavour: str
     size_pounds: float
-    cake_image_url: str
+    cake_image_url: str  # Customer reference image
+    actual_cake_image_url: Optional[str] = None  # Photo uploaded by kitchen after completion
     secondary_images: List[str] = []
     name_on_cake: Optional[str] = None
     special_instructions: Optional[str] = None
@@ -408,6 +409,7 @@ class Order(BaseModel):
     is_hold: bool = False  # Not on hold by default
     is_ready: bool = False
     ready_at: Optional[datetime] = None
+    transfer_to_outlet_id: Optional[str] = None  # Branch where order is transferred after ready
     is_deleted: bool = False
     delete_requested_by: Optional[str] = None
     delete_approved_by: Optional[str] = None
@@ -1929,7 +1931,132 @@ async def download_orders_pdf(
     
     except Exception as e:
         logger.error(f"PDF generation failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {str(e)}")
+
+@api_router.post("/orders/{order_id}/mark-ready")
+async def mark_order_ready(
+    order_id: str,
+    transfer_to_outlet_id: str,
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.KITCHEN, UserRole.FACTORY_MANAGER]))
+):
+    """Mark order as ready and transfer to specified branch (Kitchen/Factory Manager only)"""
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    if order.get('is_ready'):
+        raise HTTPException(status_code=400, detail="Order is already marked as ready")
+    
+    # Update order
+    update_data = {
+        "is_ready": True,
+        "ready_at": datetime.now(timezone.utc).isoformat(),
+        "status": "ready",
+        "transfer_to_outlet_id": transfer_to_outlet_id,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.orders.update_one({"id": order_id}, {"$set": update_data})
+    
+    # Log action
+    log = Log(
+        order_id=order_id,
+        action="order_marked_ready",
+        performed_by=current_user.id,
+        after_data={"transfer_to_outlet_id": transfer_to_outlet_id}
+    )
+    log_doc = log.model_dump()
+    log_doc['timestamp'] = log_doc['timestamp'].isoformat()
+    await db.logs.insert_one(log_doc)
+    
+    return {
+        "message": "Order marked as ready successfully",
+        "transfer_to_outlet_id": transfer_to_outlet_id,
+        "ready_at": update_data["ready_at"]
+    }
+
+@api_router.post("/orders/{order_id}/upload-actual-photo")
+async def upload_actual_cake_photo(
+    order_id: str,
+    image_url: str,
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.KITCHEN, UserRole.FACTORY_MANAGER]))
+):
+    """Upload actual cake photo after marking ready - Triggers incentive calculation"""
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    if not order.get('is_ready'):
+        raise HTTPException(status_code=400, detail="Order must be marked as ready before uploading photo")
+    
+    if order.get('actual_cake_image_url'):
+        raise HTTPException(status_code=400, detail="Actual cake photo already uploaded")
+    
+    # Update order with actual image
+    update_data = {
+        "actual_cake_image_url": image_url,
+        "photo_uploaded_at": datetime.now(timezone.utc).isoformat(),
+        "photo_uploaded_by": current_user.id,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.orders.update_one({"id": order_id}, {"$set": update_data})
+    
+    # Trigger incentive calculation
+    try:
+        await calculate_incentive_for_order(order_id, order)
+    except Exception as e:
+        logger.error(f"Failed to calculate incentive for order {order_id}: {str(e)}")
+    
+    # Log action
+    log = Log(
+        order_id=order_id,
+        action="actual_photo_uploaded",
+        performed_by=current_user.id,
+        after_data={"image_url": image_url}
+    )
+    log_doc = log.model_dump()
+    log_doc['timestamp'] = log_doc['timestamp'].isoformat()
+    await db.logs.insert_one(log_doc)
+    
+    return {
+        "message": "Photo uploaded successfully. Incentive calculation triggered.",
+        "actual_cake_image_url": image_url
+    }
+
+async def calculate_incentive_for_order(order_id: str, order: dict):
+    """Calculate and update incentive for the sales person"""
+    # Get sales person
+    sales_person_id = order.get('order_taken_by')
+    if not sales_person_id:
+        logger.warning(f"No sales person assigned to order {order_id}")
+        return
+    
+    sales_person = await db.sales_persons.find_one({"id": sales_person_id}, {"_id": 0})
+    if not sales_person:
+        logger.warning(f"Sales person {sales_person_id} not found for order {order_id}")
+        return
+    
+    # Calculate incentive (example: 5% of order amount)
+    order_amount = order.get('total_amount', 0)
+    incentive_percentage = sales_person.get('incentive_percentage', 5.0)
+    incentive_amount = order_amount * (incentive_percentage / 100)
+    
+    # Update sales person's total incentive
+    current_incentive = sales_person.get('total_incentive', 0)
+    new_total = current_incentive + incentive_amount
+    
+    await db.sales_persons.update_one(
+        {"id": sales_person_id},
+        {
+            "$set": {
+                "total_incentive": new_total,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            },
+            "$inc": {"total_orders": 1}
+        }
+    )
+    
+    logger.info(f"Incentive calculated for order {order_id}: ₹{incentive_amount:.2f} for {sales_person.get('name')}")
 
 @api_router.patch("/orders/{order_id}/status")
 async def update_order_status(
