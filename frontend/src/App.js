@@ -15,6 +15,7 @@ import MSG91Settings from './pages/MSG91Settings';
 import ManageOrders from './pages/ManageOrders';
 import Payments from './pages/Payments';
 import KitchenDashboard from './pages/KitchenDashboard';
+import KitchenDashboardNew from './pages/KitchenDashboardNew';
 import DeliveryDashboard from './pages/DeliveryDashboard';
 import Reports from './pages/Reports';
 import PermissionManagement from './pages/PermissionManagement';
@@ -148,6 +149,14 @@ const AppRoutes = () => {
       />
       <Route
         path="/kitchen"
+        element={
+          <ProtectedRoute allowedRoles={['super_admin', 'kitchen', 'factory_manager']}>
+            <KitchenDashboardNew />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/kitchen-old"
         element={
           <ProtectedRoute allowedRoles={['super_admin', 'kitchen']}>
             <KitchenDashboard />
