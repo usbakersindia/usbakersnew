@@ -184,6 +184,19 @@ const ManageOrders = () => {
 
   const handleStatusUpdate = async (orderId, newStatus) => {
     try {
+      // Validation: Cannot assign to delivery (picked_up) without photo upload
+      if (newStatus === 'picked_up') {
+        const order = orders.find(o => o.id === orderId);
+        if (!order.actual_cake_image_url) {
+          setMessage({ 
+            type: 'error', 
+            text: 'Cannot assign to delivery! Counter person must upload actual cake photo first.' 
+          });
+          setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+          return;
+        }
+      }
+
       await axios.patch(
         `${API_URL}/api/orders/${orderId}/status?status=${newStatus}`,
         {},
@@ -789,13 +802,21 @@ const ManageOrders = () => {
                                 {STATUS_CONFIG[order.status]?.nextStatus && (() => {
                                   const nextStatus = STATUS_CONFIG[order.status].nextStatus;
                                   const NextIcon = STATUS_CONFIG[nextStatus].icon;
+                                  const isDeliveryAssignment = nextStatus === 'picked_up';
+                                  const canAssignDelivery = !isDeliveryAssignment || order.actual_cake_image_url;
+                                  
                                   return (
                                     <Button
                                       size="sm"
-                                      style={{ backgroundColor: '#e92587' }}
+                                      style={{ backgroundColor: canAssignDelivery ? '#e92587' : '#9ca3af' }}
                                       className="text-white"
                                       onClick={() => handleStatusUpdate(order.id, nextStatus)}
-                                      title={`Mark as ${STATUS_CONFIG[nextStatus].label}`}
+                                      title={
+                                        isDeliveryAssignment && !canAssignDelivery
+                                          ? '⚠️ Upload cake photo first'
+                                          : `Mark as ${STATUS_CONFIG[nextStatus].label}`
+                                      }
+                                      disabled={!canAssignDelivery}
                                     >
                                       {NextIcon && <NextIcon className="h-4 w-4" />}
                                     </Button>

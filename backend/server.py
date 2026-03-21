@@ -1546,15 +1546,34 @@ async def create_order(
     total_amount = order_data.total_amount + delivery_charge
     pending_amount = total_amount
     
-    # Determine lifecycle status and order status
-    if is_punch_order:
+    # Validate required fields for completeness
+    is_complete = all([
+        order_data.customer_info.name,
+        order_data.customer_info.phone,
+        order_data.delivery_date,
+        order_data.delivery_time,
+        order_data.flavour,
+        order_data.size_pounds > 0,
+        order_data.cake_image_url,
+        total_amount > 0
+    ])
+    
+    # Determine lifecycle status based on completeness and type
+    if not is_complete:
+        # Incomplete orders → Hold (need more details)
+        lifecycle_status = "hold"
+        order_status = OrderStatus.ON_HOLD
+        is_hold = True
+    elif is_punch_order:
+        # Complete punch orders → Pending Payment
         lifecycle_status = "pending_payment"
         order_status = OrderStatus.PENDING
         is_hold = False
     else:
-        lifecycle_status = "hold"
-        order_status = OrderStatus.ON_HOLD
-        is_hold = True
+        # Complete hold orders → Active (ready for kitchen)
+        lifecycle_status = "active"
+        order_status = OrderStatus.PENDING
+        is_hold = False
     
     # Create order
     order = Order(
