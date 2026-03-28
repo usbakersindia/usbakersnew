@@ -176,7 +176,9 @@ const Payments = () => {
               </div>
             ) : (
               <div className="space-y-4">
-                {paymentsData.map((order) => (
+                {paymentsData
+                  .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                  .map((order) => (
                   <div key={order.order_id} className="border rounded-lg overflow-hidden">
                     {/* Order Header - Clickable */}
                     <div
