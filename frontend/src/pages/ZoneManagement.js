@@ -27,8 +27,12 @@ const ZoneManagement = () => {
   const [formData, setFormData] = useState({
     outlet_id: '',
     name: '',
+    description: '',
     delivery_charge: 0
   });
+  
+  const [editMode, setEditMode] = useState(false);
+  const [editingZone, setEditingZone] = useState(null);
 
   useEffect(() => {
     fetchOutlets();
@@ -61,18 +65,52 @@ const ZoneManagement = () => {
     setSuccess('');
 
     try {
-      await axios.post(`${API}/zones`, formData);
-      setSuccess('Zone created successfully!');
+      if (editMode && editingZone) {
+        // Update existing zone
+        await axios.patch(`${API}/zones/${editingZone.id}`, formData);
+        setSuccess('Zone updated successfully!');
+      } else {
+        // Create new zone
+        await axios.post(`${API}/zones`, formData);
+        setSuccess('Zone created successfully!');
+      }
       setDialogOpen(false);
+      setEditMode(false);
+      setEditingZone(null);
       setFormData({
         outlet_id: '',
         name: '',
+        description: '',
         delivery_charge: 0
       });
       fetchZones();
     } catch (error) {
-      setError(error.response?.data?.detail || 'Failed to create zone');
+      setError(error.response?.data?.detail || `Failed to ${editMode ? 'update' : 'create'} zone`);
     }
+  };
+  
+  const handleEditZone = (zone) => {
+    setEditMode(true);
+    setEditingZone(zone);
+    setFormData({
+      outlet_id: zone.outlet_id,
+      name: zone.name,
+      description: zone.description || '',
+      delivery_charge: zone.delivery_charge
+    });
+    setDialogOpen(true);
+  };
+  
+  const handleAddNew = () => {
+    setEditMode(false);
+    setEditingZone(null);
+    setFormData({
+      outlet_id: '',
+      name: '',
+      description: '',
+      delivery_charge: 0
+    });
+    setDialogOpen(true);
   };
 
   const handleToggleActive = async (zoneId, currentStatus) => {
@@ -132,6 +170,7 @@ const ZoneManagement = () => {
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button
+                onClick={handleAddNew}
                 className="text-white"
                 style={{ backgroundColor: '#e92587' }}
                 data-testid="create-zone-button"
@@ -142,8 +181,8 @@ const ZoneManagement = () => {
             </DialogTrigger>
             <DialogContent className="max-w-md">
               <DialogHeader>
-                <DialogTitle>Create New Zone</DialogTitle>
-                <DialogDescription>Add a new delivery zone</DialogDescription>
+                <DialogTitle>{editMode ? 'Edit Zone' : 'Create New Zone'}</DialogTitle>
+                <DialogDescription>{editMode ? 'Update zone details' : 'Add a new delivery zone'}</DialogDescription>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4">
                 {error && (
@@ -182,6 +221,16 @@ const ZoneManagement = () => {
                     data-testid="zone-name-input"
                   />
                 </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="zone-description">Description (Optional)</Label>
+                  <Input
+                    id="zone-description"
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    placeholder="e.g., Covers areas near main street"
+                  />
+                </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="delivery-charge">Delivery Charge (₹) *</Label>
@@ -203,7 +252,7 @@ const ZoneManagement = () => {
                   style={{ backgroundColor: '#e92587' }}
                   data-testid="submit-zone-button"
                 >
-                  Create Zone
+                  {editMode ? 'Update Zone' : 'Create Zone'}
                 </Button>
               </form>
             </DialogContent>
@@ -254,6 +303,7 @@ const ZoneManagement = () => {
                   <TableRow>
                     <TableHead>Outlet</TableHead>
                     <TableHead>Zone Name</TableHead>
+                    <TableHead>Description</TableHead>
                     <TableHead>Delivery Charge</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -264,6 +314,7 @@ const ZoneManagement = () => {
                     <TableRow key={zone.id}>
                       <TableCell className="font-medium">{getOutletName(zone.outlet_id)}</TableCell>
                       <TableCell>{zone.name}</TableCell>
+                      <TableCell className="text-sm text-gray-600">{zone.description || '-'}</TableCell>
                       <TableCell>
                         <span className="font-bold" style={{ color: '#e92587' }}>
                           ₹{zone.delivery_charge.toFixed(2)}
@@ -278,6 +329,15 @@ const ZoneManagement = () => {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleEditZone(zone)}
+                            className="text-blue-600 border-blue-600 hover:bg-blue-50"
+                            title="Edit Zone"
+                          >
+                            <MapPin className="h-4 w-4" />
+                          </Button>
                           <Button
                             size="sm"
                             variant={zone.is_active ? "outline" : "default"}

@@ -327,6 +327,7 @@ class Zone(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     outlet_id: str
     name: str
+    description: Optional[str] = None
     delivery_charge: float
     is_active: bool = True
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -334,6 +335,7 @@ class Zone(BaseModel):
 class ZoneCreate(BaseModel):
     outlet_id: str
     name: str
+    description: Optional[str] = None
     delivery_charge: float
 
 # Order Models
@@ -1467,6 +1469,29 @@ async def toggle_zone_active(
         "is_active": new_status
     }
 
+@api_router.patch("/zones/{zone_id}")
+async def update_zone(
+    zone_id: str,
+    update_data: Dict[str, Any],
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Update zone details (Super Admin only)"""
+    zone = await db.zones.find_one({"id": zone_id}, {"_id": 0})
+    if not zone:
+        raise HTTPException(status_code=404, detail="Zone not found")
+    
+    update_fields = {}
+    allowed_fields = ['name', 'description', 'delivery_charge']
+    
+    for field in allowed_fields:
+        if field in update_data:
+            update_fields[field] = update_data[field]
+    
+    if update_fields:
+        await db.zones.update_one({"id": zone_id}, {"$set": update_fields})
+    
+    return {"message": "Zone updated successfully"}
+
 @api_router.delete("/zones/{zone_id}")
 async def delete_zone(
     zone_id: str,
@@ -1793,7 +1818,7 @@ async def update_order(
     
     # Allow specific fields to be updated
     allowed_fields = ['flavour', 'size_pounds', 'cake_image_url', 'delivery_date', 'delivery_time', 
-                     'name_on_cake', 'special_instructions', 'total_amount', 'secondary_images']
+                     'name_on_cake', 'special_instructions', 'total_amount', 'secondary_images', 'customer_info']
     
     for field in allowed_fields:
         if field in update_data:
