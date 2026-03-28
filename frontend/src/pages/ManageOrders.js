@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -27,7 +28,9 @@ import {
   Ban,
   Download,
   Upload,
-  Image as ImageIcon
+  Image as ImageIcon,
+  MoreVertical,
+  Trash2
 } from 'lucide-react';
 import axios from 'axios';
 import * as XLSX from 'xlsx';
@@ -87,6 +90,14 @@ const ManageOrders = () => {
   const [photoPreview, setPhotoPreview] = useState(null);
   const [outlets, setOutlets] = useState([]);
   const [message, setMessage] = useState({ type: '', text: '' });
+  
+  // New state for edit functionality
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editFormData, setEditFormData] = useState(null);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
   
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -214,6 +225,69 @@ const ManageOrders = () => {
   const handleViewOrder = (order) => {
     setSelectedOrder(order);
     setDialogOpen(true);
+  };
+  
+  const handleEditOrder = (order) => {
+    setEditFormData({
+      ...order,
+      customer_name: order.customer_info?.name || '',
+      customer_phone: order.customer_info?.phone || '',
+      customer_address: order.customer_info?.address || order.delivery_address || ''
+    });
+    setEditDialogOpen(true);
+  };
+  
+  const submitEditOrder = async () => {
+    try {
+      const updateData = {
+        customer_info: {
+          name: editFormData.customer_name,
+          phone: editFormData.customer_phone,
+          address: editFormData.customer_address
+        },
+        delivery_date: editFormData.delivery_date,
+        delivery_time: editFormData.delivery_time,
+        occasion: editFormData.occasion,
+        flavour: editFormData.flavour,
+        size_pounds: parseFloat(editFormData.size_pounds),
+        name_on_cake: editFormData.name_on_cake,
+        total_amount: parseFloat(editFormData.total_amount),
+        special_instructions: editFormData.special_instructions
+      };
+      
+      await axios.patch(
+        `${API_URL}/api/orders/${editFormData.id}`,
+        updateData,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      setMessage({ type: 'success', text: 'Order updated successfully' });
+      setEditDialogOpen(false);
+      setEditFormData(null);
+      fetchOrders();
+    } catch (error) {
+      console.error('Error updating order:', error);
+      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to update order' });
+    }
+  };
+  
+  const handleDeleteOrder = async (order) => {
+    if (!window.confirm(`Are you sure you want to delete order ${order.order_number}?`)) {
+      return;
+    }
+    
+    try {
+      await axios.delete(
+        `${API_URL}/api/orders/${order.id}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      setMessage({ type: 'success', text: 'Order deleted successfully' });
+      fetchOrders();
+    } catch (error) {
+      console.error('Error deleting order:', error);
+      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to delete order' });
+    }
   };
 
   const openPhotoUploadModal = (order) => {
@@ -664,7 +738,9 @@ const ManageOrders = () => {
                           </TableCell>
                         </TableRow>
                       ) : (
-                        filteredOrders.map((order) => (
+                        filteredOrders
+                          .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                          .map((order) => (
                           <TableRow 
                             key={order.id}
                             className={order.status === 'delivered' ? 'bg-green-50 hover:bg-green-100' : ''}
@@ -739,7 +815,8 @@ const ManageOrders = () => {
                             </TableCell>
                             <TableCell>{getStatusBadge(order.status)}</TableCell>
                             <TableCell className="text-right">
-                              <div className="flex justify-end space-x-2">
+                              <div className="flex justify-end items-center space-x-2">
+                                {/* Photo Upload Button */}
                                 {order.is_ready && !order.actual_cake_image_url && (
                                   <Button
                                     size="sm"
@@ -751,76 +828,60 @@ const ManageOrders = () => {
                                   </Button>
                                 )}
                                 {order.actual_cake_image_url && (
-                                  <Badge className="bg-green-600 text-white">✓ Photo</Badge>
+                                  <Badge className="bg-green-600 text-white text-xs">✓ Photo</Badge>
                                 )}
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleViewOrder(order)}
-                                  title="View Details"
+                                
+                                {/* Status Dropdown */}
+                                <Select 
+                                  value={order.status}
+                                  onValueChange={(newStatus) => handleStatusUpdate(order.id, newStatus)}
                                 >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handlePrintKOT(order)}
-                                  title="Print KOT"
-                                >
-                                  <Printer className="h-4 w-4" />
-                                </Button>
-                                {order.pending_amount > 0 && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    disabled
-                                    title="Payments are automatically synced from PetPooja POS"
-                                  >
-                                    <DollarSign className="h-4 w-4" />
-                                  </Button>
-                                )}
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleTransferOrder(order)}
-                                  title="Transfer to Another Outlet"
-                                >
-                                  <ArrowRightLeft className="h-4 w-4" />
-                                </Button>
-                                {order.needs_delivery && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleCancelDelivery(order)}
-                                    title="Cancel Delivery"
-                                    className="text-red-600"
-                                  >
-                                    <Ban className="h-4 w-4" />
-                                  </Button>
-                                )}
-                                {STATUS_CONFIG[order.status]?.nextStatus && (() => {
-                                  const nextStatus = STATUS_CONFIG[order.status].nextStatus;
-                                  const NextIcon = STATUS_CONFIG[nextStatus].icon;
-                                  const isDeliveryAssignment = nextStatus === 'picked_up';
-                                  const canAssignDelivery = !isDeliveryAssignment || order.actual_cake_image_url;
-                                  
-                                  return (
-                                    <Button
-                                      size="sm"
-                                      style={{ backgroundColor: canAssignDelivery ? '#e92587' : '#9ca3af' }}
-                                      className="text-white"
-                                      onClick={() => handleStatusUpdate(order.id, nextStatus)}
-                                      title={
-                                        isDeliveryAssignment && !canAssignDelivery
-                                          ? '⚠️ Upload cake photo first'
-                                          : `Mark as ${STATUS_CONFIG[nextStatus].label}`
-                                      }
-                                      disabled={!canAssignDelivery}
+                                  <SelectTrigger className="w-[140px] h-8">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="confirmed">Confirmed</SelectItem>
+                                    <SelectItem value="preparing">Preparing</SelectItem>
+                                    <SelectItem value="ready">Ready</SelectItem>
+                                    <SelectItem 
+                                      value="picked_up"
+                                      disabled={!order.actual_cake_image_url}
                                     >
-                                      {NextIcon && <NextIcon className="h-4 w-4" />}
+                                      Picked Up {!order.actual_cake_image_url && '🔒'}
+                                    </SelectItem>
+                                    <SelectItem value="delivered">Delivered</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                
+                                {/* More Menu */}
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button size="sm" variant="outline">
+                                      <MoreVertical className="h-4 w-4" />
                                     </Button>
-                                  );
-                                })()}
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => handleEditOrder(order)}>
+                                      <Edit className="h-4 w-4 mr-2" />
+                                      Edit Order
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handlePrintKOT(order)}>
+                                      <Printer className="h-4 w-4 mr-2" />
+                                      Print KOT
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleTransferOrder(order)}>
+                                      <ArrowRightLeft className="h-4 w-4 mr-2" />
+                                      Transfer
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem 
+                                      onClick={() => handleDeleteOrder(order)}
+                                      className="text-red-600"
+                                    >
+                                      <Trash2 className="h-4 w-4 mr-2" />
+                                      Delete
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
                               </div>
                             </TableCell>
                           </TableRow>
@@ -829,6 +890,46 @@ const ManageOrders = () => {
                     </TableBody>
                   </Table>
                 </div>
+                
+                {/* Pagination Controls */}
+                {filteredOrders.length > itemsPerPage && (
+                  <div className="flex items-center justify-between mt-4 px-4">
+                    <div className="text-sm text-gray-600">
+                      Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredOrders.length)} of {filteredOrders.length} orders
+                    </div>
+                    <div className="flex space-x-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                        disabled={currentPage === 1}
+                      >
+                        Previous
+                      </Button>
+                      <div className="flex items-center space-x-1">
+                        {Array.from({ length: Math.ceil(filteredOrders.length / itemsPerPage) }, (_, i) => i + 1).map((page) => (
+                          <Button
+                            key={page}
+                            size="sm"
+                            variant={currentPage === page ? "default" : "outline"}
+                            onClick={() => setCurrentPage(page)}
+                            className={currentPage === page ? "bg-pink-600 text-white" : ""}
+                          >
+                            {page}
+                          </Button>
+                        ))}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setCurrentPage(Math.min(Math.ceil(filteredOrders.length / itemsPerPage), currentPage + 1))}
+                        disabled={currentPage >= Math.ceil(filteredOrders.length / itemsPerPage)}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Status Legend */}
                 <div className="mt-6 p-4 bg-gray-50 rounded-lg border">
@@ -1077,6 +1178,121 @@ const ManageOrders = () => {
                 Upload Photo & Calculate Incentive
               </Button>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Order Dialog */}
+        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Edit Order - {editFormData?.order_number}</DialogTitle>
+              <DialogDescription>Update order details below</DialogDescription>
+            </DialogHeader>
+            {editFormData && (
+              <div className="space-y-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Customer Name *</Label>
+                    <Input
+                      value={editFormData.customer_name}
+                      onChange={(e) => setEditFormData({...editFormData, customer_name: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <Label>Customer Phone *</Label>
+                    <Input
+                      value={editFormData.customer_phone}
+                      onChange={(e) => setEditFormData({...editFormData, customer_phone: e.target.value})}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label>Delivery Address</Label>
+                  <Input
+                    value={editFormData.customer_address}
+                    onChange={(e) => setEditFormData({...editFormData, customer_address: e.target.value})}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Delivery Date *</Label>
+                    <Input
+                      type="date"
+                      value={editFormData.delivery_date}
+                      onChange={(e) => setEditFormData({...editFormData, delivery_date: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <Label>Delivery Time *</Label>
+                    <Input
+                      type="time"
+                      value={editFormData.delivery_time}
+                      onChange={(e) => setEditFormData({...editFormData, delivery_time: e.target.value})}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Occasion *</Label>
+                    <Input
+                      value={editFormData.occasion}
+                      onChange={(e) => setEditFormData({...editFormData, occasion: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <Label>Flavour *</Label>
+                    <Input
+                      value={editFormData.flavour}
+                      onChange={(e) => setEditFormData({...editFormData, flavour: e.target.value})}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Size (Pounds) *</Label>
+                    <Input
+                      type="number"
+                      step="0.5"
+                      value={editFormData.size_pounds}
+                      onChange={(e) => setEditFormData({...editFormData, size_pounds: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <Label>Total Amount *</Label>
+                    <Input
+                      type="number"
+                      value={editFormData.total_amount}
+                      onChange={(e) => setEditFormData({...editFormData, total_amount: e.target.value})}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label>Name on Cake</Label>
+                  <Input
+                    value={editFormData.name_on_cake || ''}
+                    onChange={(e) => setEditFormData({...editFormData, name_on_cake: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <Label>Special Instructions</Label>
+                  <Input
+                    value={editFormData.special_instructions || ''}
+                    onChange={(e) => setEditFormData({...editFormData, special_instructions: e.target.value})}
+                  />
+                </div>
+                <div className="flex justify-end space-x-2 pt-4">
+                  <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={submitEditOrder}
+                    className="bg-pink-600 text-white hover:bg-pink-700"
+                  >
+                    Save Changes
+                  </Button>
+                </div>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
 
