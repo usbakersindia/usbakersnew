@@ -59,7 +59,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
-        "https://*.preview.emergentagent.com",
+        "https://bakery-system-build.preview.emergentagent.com",
         "https://*.emergentagent.com"
     ],
     allow_credentials=True,

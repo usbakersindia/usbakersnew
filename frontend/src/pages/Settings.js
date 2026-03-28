@@ -9,7 +9,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Settings as SettingsIcon, Plus, Trash2, Save, Loader2 } from 'lucide-react';
+import { Settings as SettingsIcon, Plus, Trash2, Save, Loader2, Clock } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -37,7 +37,12 @@ const Settings = () => {
 
   // Time Slots
   const [timeSlots, setTimeSlots] = useState([]);
-  const [newTimeSlot, setNewTimeSlot] = useState('');
+  const [slotStartHour, setSlotStartHour] = useState('10');
+  const [slotStartMinute, setSlotStartMinute] = useState('00');
+  const [slotStartPeriod, setSlotStartPeriod] = useState('AM');
+  const [slotEndHour, setSlotEndHour] = useState('12');
+  const [slotEndMinute, setSlotEndMinute] = useState('00');
+  const [slotEndPeriod, setSlotEndPeriod] = useState('PM');
 
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState('');
@@ -211,20 +216,16 @@ const Settings = () => {
 
   // ==================== TIME SLOTS ====================
   const addTimeSlot = async () => {
-    if (!newTimeSlot.trim()) {
-      showError('Please enter time slot');
-      return;
-    }
+    const formattedSlot = `${slotStartHour}:${slotStartMinute} ${slotStartPeriod} - ${slotEndHour}:${slotEndMinute} ${slotEndPeriod}`;
 
     const token = localStorage.getItem('token');
     setLoading(true);
     try {
       await axios.post(`${API}/time-slots`, {
-        time_slot: newTimeSlot
+        time_slot: formattedSlot
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setNewTimeSlot('');
       fetchAllSettings();
       showSuccess('Time slot added successfully');
     } catch (error) {
@@ -500,25 +501,102 @@ const Settings = () => {
         {/* SECTION 5: Delivery Time Slots */}
         <Card>
           <CardHeader>
-            <CardTitle>Delivery Time Slots</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5" />
+              Delivery Time Slots
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex gap-4">
-              <Input
-                placeholder="Enter time slot (e.g., 10:00 AM - 12:00 PM)"
-                value={newTimeSlot}
-                onChange={(e) => setNewTimeSlot(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && addTimeSlot()}
-              />
-              <Button
-                onClick={addTimeSlot}
-                disabled={loading}
-                className="text-white whitespace-nowrap"
-                style={{ backgroundColor: '#e92587' }}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Add Time Slot
-              </Button>
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs text-gray-500">Start Time</Label>
+                  <div className="flex gap-1">
+                    <Select value={slotStartHour} onValueChange={setSlotStartHour}>
+                      <SelectTrigger className="w-[70px]" data-testid="start-hour-select">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0')).map(h => (
+                          <SelectItem key={h} value={h}>{h}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <span className="flex items-center font-bold">:</span>
+                    <Select value={slotStartMinute} onValueChange={setSlotStartMinute}>
+                      <SelectTrigger className="w-[70px]" data-testid="start-minute-select">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {['00', '15', '30', '45'].map(m => (
+                          <SelectItem key={m} value={m}>{m}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={slotStartPeriod} onValueChange={setSlotStartPeriod}>
+                      <SelectTrigger className="w-[70px]" data-testid="start-period-select">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="AM">AM</SelectItem>
+                        <SelectItem value="PM">PM</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <span className="flex items-center pb-1 text-gray-400 font-medium">to</span>
+
+                <div className="space-y-1">
+                  <Label className="text-xs text-gray-500">End Time</Label>
+                  <div className="flex gap-1">
+                    <Select value={slotEndHour} onValueChange={setSlotEndHour}>
+                      <SelectTrigger className="w-[70px]" data-testid="end-hour-select">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0')).map(h => (
+                          <SelectItem key={h} value={h}>{h}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <span className="flex items-center font-bold">:</span>
+                    <Select value={slotEndMinute} onValueChange={setSlotEndMinute}>
+                      <SelectTrigger className="w-[70px]" data-testid="end-minute-select">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {['00', '15', '30', '45'].map(m => (
+                          <SelectItem key={m} value={m}>{m}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={slotEndPeriod} onValueChange={setSlotEndPeriod}>
+                      <SelectTrigger className="w-[70px]" data-testid="end-period-select">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="AM">AM</SelectItem>
+                        <SelectItem value="PM">PM</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <Button
+                  onClick={addTimeSlot}
+                  disabled={loading}
+                  className="text-white whitespace-nowrap"
+                  style={{ backgroundColor: '#e92587' }}
+                  data-testid="add-time-slot-btn"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Time Slot
+                </Button>
+              </div>
+              <p className="text-xs text-gray-400">
+                Preview: {slotStartHour}:{slotStartMinute} {slotStartPeriod} - {slotEndHour}:{slotEndMinute} {slotEndPeriod}
+              </p>
             </div>
 
             {timeSlots.length > 0 ? (

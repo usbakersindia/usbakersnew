@@ -175,6 +175,7 @@ const Payments = () => {
                 No payments found.
               </div>
             ) : (
+              <>
               <div className="space-y-4">
                 {paymentsData
                   .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
@@ -305,6 +306,7 @@ const Payments = () => {
                   </div>
                 </div>
               )}
+              </>
             )}
           </CardContent>
         </Card>
