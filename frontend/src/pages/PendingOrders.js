@@ -3,7 +3,8 @@ import axios from 'axios';
 import LayoutWithSidebar from '../components/LayoutWithSidebar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Clock, DollarSign, User, MapPin } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Clock, DollarSign, User, MapPin, CreditCard } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -44,6 +45,26 @@ const PendingOrders = () => {
       setSettings(response.data);
     } catch (error) {
       console.error('Failed to fetch settings:', error);
+    }
+  };
+  
+  const markAsCredit = async (orderId) => {
+    if (!window.confirm('Mark this order as Credit Order? It will bypass payment threshold.')) {
+      return;
+    }
+    
+    try {
+      const token = localStorage.getItem('token');
+      await axios.post(
+        `${API}/orders/${orderId}/mark-credit`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      fetchPendingOrders(); // Refresh list
+      alert('Order marked as credit successfully!');
+    } catch (error) {
+      console.error('Failed to mark as credit:', error);
+      alert('Failed to mark order as credit');
     }
   };
 
@@ -206,6 +227,18 @@ const PendingOrders = () => {
                       <div className="text-xs text-gray-600">
                         Needs ₹{(order.total_amount * threshold / 100 - (order.paid_amount || 0)).toFixed(2)} more
                       </div>
+                    )}
+                    
+                    {/* Mark as Credit Button - Super Admin Only */}
+                    {user?.role === 'super_admin' && (
+                      <Button
+                        onClick={() => markAsCredit(order.id)}
+                        className="w-full bg-purple-600 hover:bg-purple-700 text-white mt-3"
+                        size="sm"
+                      >
+                        <CreditCard className="h-4 w-4 mr-2" />
+                        Mark as Credit Order
+                      </Button>
                     )}
                   </CardContent>
                 </Card>

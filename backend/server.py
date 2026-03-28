@@ -2018,6 +2018,29 @@ async def mark_order_ready(
         "ready_at": update_data["ready_at"]
     }
 
+@api_router.post("/orders/{order_id}/mark-credit")
+async def mark_order_as_credit(
+    order_id: str,
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Mark order as credit order - bypasses payment threshold (Super Admin only)"""
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    await db.orders.update_one(
+        {"id": order_id},
+        {"$set": {
+            "is_credit_order": True,
+            "status": "confirmed",
+            "updated_at": datetime.now(timezone.utc)
+        }}
+    )
+    
+    return {"message": "Order marked as credit successfully"}
+
+
 @api_router.post("/orders/{order_id}/upload-actual-photo")
 async def upload_actual_cake_photo(
     order_id: str,
