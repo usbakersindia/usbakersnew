@@ -55,7 +55,7 @@ const NewOrder = () => {
     custom_delivery_charge: 0,
     occasion: '',
     flavour: '',
-    size_pounds: 1,
+    size_pounds: '',
     cake_image_url: '',
     secondary_images: [],
     name_on_cake: '',
@@ -669,8 +669,9 @@ const NewOrder = () => {
                     type="number"
                     step="0.5"
                     min="0.5"
-                    value={formData.size_pounds}
-                    onChange={(e) => setFormData({ ...formData, size_pounds: parseFloat(e.target.value) })}
+                    placeholder="Enter cake size in pounds"
+                    value={formData.size_pounds || ''}
+                    onChange={(e) => setFormData({ ...formData, size_pounds: e.target.value ? parseFloat(e.target.value) : '' })}
                     data-testid="size-input"
                   />
                 </div>
@@ -891,22 +892,6 @@ const NewOrder = () => {
           </Card>
 
           <div className="flex justify-end space-x-4">
-
-          {/* Credit Order Checkbox - Super Admin Only */}
-          {user?.role === 'super_admin' && (
-            <div className="flex items-center space-x-2 mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <Switch
-                id="credit-order"
-                checked={formData.is_credit_order}
-                onCheckedChange={(checked) => setFormData({ ...formData, is_credit_order: checked })}
-              />
-              <Label htmlFor="credit-order" className="cursor-pointer">
-                <span className="font-semibold">Mark as Credit Order</span>
-                <p className="text-sm text-gray-600">Order will be released manually by Super Admin</p>
-              </Label>
-            </div>
-          )}
-
             <Button type="button" variant="outline" onClick={() => navigate('/dashboard')}>
               Cancel
             </Button>
