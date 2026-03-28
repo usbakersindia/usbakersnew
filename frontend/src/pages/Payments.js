@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronUp, Wallet, CreditCard } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -17,6 +18,8 @@ const Payments = () => {
   const [loading, setLoading] = useState(true);
   const [filterOutlet, setFilterOutlet] = useState('all');
   const [expandedOrders, setExpandedOrders] = useState(new Set());
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
 
   useEffect(() => {
     fetchOutlets();
@@ -273,6 +276,33 @@ const Payments = () => {
                   </div>
                 ))}
               </div>
+              
+              {/* Pagination Controls */}
+              {paymentsData.length > itemsPerPage && (
+                <div className="flex items-center justify-between mt-4 px-4 pb-4">
+                  <div className="text-sm text-gray-600">
+                    Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, paymentsData.length)} of {paymentsData.length} orders
+                  </div>
+                  <div className="flex space-x-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setCurrentPage(Math.min(Math.ceil(paymentsData.length / itemsPerPage), currentPage + 1))}
+                      disabled={currentPage >= Math.ceil(paymentsData.length / itemsPerPage)}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
             )}
           </CardContent>
         </Card>

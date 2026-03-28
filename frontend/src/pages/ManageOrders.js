@@ -465,7 +465,14 @@ const ManageOrders = () => {
   };
 
   const handlePrintKOT = (order) => {
-    // Open print window with KOT
+    // Get outlet name
+    const outlet = outlets.find(o => o.id === order.outlet_id);
+    const outletName = outlet ? outlet.name : 'N/A';
+    
+    // Generate order URL for QR code
+    const orderUrl = `${window.location.origin}/orders/${order.id}`;
+    
+    // Open print window with complete KOT
     const printWindow = window.open('', '_blank');
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -473,58 +480,208 @@ const ManageOrders = () => {
         <head>
           <title>KOT - ${order.order_number}</title>
           <style>
-            body { font-family: 'Courier New', monospace; padding: 20px; max-width: 300px; }
-            .header { text-align: center; border-bottom: 2px dashed #000; padding-bottom: 10px; margin-bottom: 10px; }
-            .header h1 { margin: 0; font-size: 24px; }
-            .header h2 { margin: 5px 0; font-size: 18px; }
-            .section { margin: 15px 0; }
-            .section-title { font-weight: bold; font-size: 14px; text-decoration: underline; }
-            .item { margin: 5px 0; }
-            .footer { text-align: center; border-top: 2px dashed #000; padding-top: 10px; margin-top: 20px; }
-            .qr-code { text-align: center; margin: 10px 0; }
+            body { 
+              font-family: 'Arial', sans-serif; 
+              padding: 20px; 
+              max-width: 400px; 
+              margin: 0 auto;
+            }
+            .header { 
+              text-align: center; 
+              border-bottom: 3px solid #000; 
+              padding-bottom: 15px; 
+              margin-bottom: 15px; 
+            }
+            .header h1 { 
+              margin: 0; 
+              font-size: 28px; 
+              color: #e92587;
+              font-weight: bold;
+            }
+            .header h2 { 
+              margin: 5px 0; 
+              font-size: 16px; 
+              color: #666;
+            }
+            .section { 
+              margin: 12px 0; 
+              padding: 10px;
+              background: #f9f9f9;
+              border-radius: 5px;
+            }
+            .section-title { 
+              font-weight: bold; 
+              font-size: 14px; 
+              color: #e92587;
+              margin-bottom: 8px;
+              text-transform: uppercase;
+            }
+            .item { 
+              margin: 6px 0;
+              font-size: 13px;
+              display: flex;
+              justify-content: space-between;
+            }
+            .item-label {
+              font-weight: 600;
+              color: #333;
+            }
+            .item-value {
+              color: #666;
+            }
+            .highlight {
+              background: #fff3cd;
+              padding: 10px;
+              border-left: 4px solid #ffc107;
+              margin: 15px 0;
+              font-size: 14px;
+              font-weight: bold;
+            }
+            .footer { 
+              text-align: center; 
+              border-top: 3px solid #000; 
+              padding-top: 15px; 
+              margin-top: 20px; 
+            }
+            .qr-code { 
+              margin: 15px 0; 
+            }
+            .qr-code img {
+              border: 2px solid #e92587;
+              padding: 5px;
+              border-radius: 8px;
+            }
+            .billing-note {
+              background: #e8f5e9;
+              padding: 12px;
+              border-radius: 5px;
+              margin-top: 15px;
+              font-weight: bold;
+              color: #2e7d32;
+              border: 2px dashed #4caf50;
+            }
+            @media print {
+              body { max-width: 100%; }
+            }
           </style>
         </head>
         <body>
           <div class="header">
             <h1>US BAKERS</h1>
-            <h2>Kitchen Order Ticket</h2>
-            <p><strong>Order #${order.order_number}</strong></p>
-            <p>${new Date().toLocaleString()}</p>
+            <h2>Kitchen Order Ticket (KOT)</h2>
+            <div style="margin-top: 10px;">
+              <strong>Order ID:</strong> ${order.order_number}<br/>
+              <strong>Date of Booking:</strong> ${new Date(order.created_at).toLocaleDateString('en-IN')}
+            </div>
           </div>
           
           <div class="section">
-            <div class="section-title">Customer Details:</div>
-            <div class="item">Name: ${order.customer_info?.name || 'N/A'}</div>
-            <div class="item">Phone: ${order.customer_info?.phone || 'N/A'}</div>
+            <div class="section-title">Order Information</div>
+            <div class="item">
+              <span class="item-label">Outlet Name:</span>
+              <span class="item-value">${outletName}</span>
+            </div>
+            <div class="item">
+              <span class="item-label">Taken By:</span>
+              <span class="item-value">${order.order_taken_by || 'N/A'}</span>
+            </div>
+            <div class="item">
+              <span class="item-label">Branch:</span>
+              <span class="item-value">${outletName}</span>
+            </div>
+            <div class="item">
+              <span class="item-label">Delivery Status:</span>
+              <span class="item-value">${order.status.toUpperCase()}</span>
+            </div>
           </div>
           
           <div class="section">
-            <div class="section-title">Order Details:</div>
-            <div class="item">Flavour: ${order.flavour || 'N/A'}</div>
-            <div class="item">Size: ${order.size_pounds} lbs</div>
-            <div class="item">Name on Cake: ${order.name_on_cake || 'None'}</div>
-            ${order.occasion ? `<div class="item">Occasion: ${order.occasion}</div>` : ''}
+            <div class="section-title">Customer Details</div>
+            <div class="item">
+              <span class="item-label">Name:</span>
+              <span class="item-value">${order.customer_info?.name || 'N/A'}</span>
+            </div>
+            <div class="item">
+              <span class="item-label">Phone Number:</span>
+              <span class="item-value">${order.customer_info?.phone || 'N/A'}</span>
+            </div>
+            <div class="item">
+              <span class="item-label">Address:</span>
+              <span class="item-value">${order.customer_info?.address || order.delivery_address || 'N/A'}</span>
+            </div>
+            <div class="item">
+              <span class="item-label">Delivery Zone:</span>
+              <span class="item-value">${order.delivery_zone || 'N/A'}</span>
+            </div>
           </div>
           
           <div class="section">
-            <div class="section-title">Delivery Information:</div>
-            <div class="item">Date: ${order.delivery_date}</div>
-            <div class="item">Time: ${order.delivery_time}</div>
-            ${order.needs_delivery ? `<div class="item">Address: ${order.delivery_address}</div>` : '<div class="item">Type: Self Pickup</div>'}
+            <div class="section-title">Cake Details</div>
+            <div class="item">
+              <span class="item-label">Occasion:</span>
+              <span class="item-value">${order.occasion || 'N/A'}</span>
+            </div>
+            <div class="item">
+              <span class="item-label">Flavour:</span>
+              <span class="item-value">${order.flavour || 'N/A'}</span>
+            </div>
+            <div class="item">
+              <span class="item-label">Size:</span>
+              <span class="item-value">${order.size_pounds} Pounds</span>
+            </div>
+            <div class="item">
+              <span class="item-label">Name on Cake:</span>
+              <span class="item-value">${order.name_on_cake || 'None'}</span>
+            </div>
+          </div>
+          
+          <div class="section">
+            <div class="section-title">Delivery Information</div>
+            <div class="item">
+              <span class="item-label">Delivery Date:</span>
+              <span class="item-value">${order.delivery_date}</span>
+            </div>
+            <div class="item">
+              <span class="item-label">Delivery Time:</span>
+              <span class="item-value">${order.delivery_time}</span>
+            </div>
           </div>
           
           ${order.special_instructions ? `
-          <div class="section">
-            <div class="section-title">Special Instructions:</div>
-            <div class="item">${order.special_instructions}</div>
+          <div class="highlight">
+            <div style="color: #856404; margin-bottom: 5px;">⚠️ SPECIAL INSTRUCTIONS:</div>
+            ${order.special_instructions}
           </div>
           ` : ''}
           
+          <div class="section">
+            <div class="section-title">Payment & PetPooja Details</div>
+            <div class="item">
+              <span class="item-label">Total Amount:</span>
+              <span class="item-value">₹${order.total_amount.toFixed(2)}</span>
+            </div>
+            <div class="item">
+              <span class="item-label">Paid Amount:</span>
+              <span class="item-value">₹${order.paid_amount ? order.paid_amount.toFixed(2) : '0.00'}</span>
+            </div>
+            <div class="item">
+              <span class="item-label">PetPooja Bill No.:</span>
+              <span class="item-value">${order.petpooja_bill_number || 'Pending'}</span>
+            </div>
+          </div>
+          
+          <div class="billing-note">
+            📋 Billing in PetPooja
+          </div>
+          
           <div class="footer">
             <div class="qr-code">
-              <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${order.order_number}" alt="QR Code" />
+              <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(orderUrl)}" alt="Order QR Code" />
+              <div style="font-size: 11px; color: #666; margin-top: 5px;">Scan for order details</div>
             </div>
-            <p><strong>Amount: ₹${order.total_amount.toFixed(2)}</strong></p>
+            <div style="font-size: 12px; color: #666; margin-top: 10px;">
+              Generated: ${new Date().toLocaleString('en-IN')}
+            </div>
           </div>
         </body>
       </html>
