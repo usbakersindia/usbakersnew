@@ -955,6 +955,35 @@ async def update_system_settings(
     
     return {"message": "Settings updated successfully"}
 
+@api_router.post("/system-reset")
+async def reset_system(
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Reset all system data except super admin user (Super Admin only)"""
+    collections_to_clear = [
+        "orders", "payments", "outlets", "zones", "cake_flavours",
+        "occasions", "delivery_time_slots", "sales_persons", "customers",
+        "branch_payment_thresholds", "role_permissions", "logs",
+        "petpooja_bills", "petpooja_settings"
+    ]
+    cleared = {}
+    for col_name in collections_to_clear:
+        result = await db[col_name].delete_many({})
+        cleared[col_name] = result.deleted_count
+
+    # Delete all non-super_admin users
+    user_result = await db.users.delete_many({"role": {"$ne": "super_admin"}})
+    cleared["users (non-admin)"] = user_result.deleted_count
+
+    # Reset system settings to defaults
+    await db.system_settings.update_one(
+        {"id": "system_settings"},
+        {"$set": {"minimum_payment_percentage": 20.0, "birthday_mandatory": False}},
+        upsert=True
+    )
+
+    return {"message": "System reset successful", "cleared": cleared}
+
 @api_router.patch("/users/{user_id}/toggle-active")
 async def toggle_user_active(
     user_id: str,

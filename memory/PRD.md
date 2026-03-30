@@ -27,7 +27,10 @@ Comprehensive CRM and management system for a multi-outlet bakery chain named "U
 ## What's Been Implemented (Latest Session - March 28-30, 2026)
 - Fixed Payments.js JSX syntax error (missing React fragment wrapper for pagination)
 - Implemented Clock/Time Picker for Delivery Time Slots in Settings
-- Fixed Kitchen Dashboard logout button missing in empty state (no orders) view (replaced text input with hour/minute/AM-PM selectors)
+- Fixed Kitchen Dashboard logout button missing in empty state (no orders) view
+- Created seed script (`backend/seed_data.py`) with dummy data: 3 outlets, 9 zones, 5 users, 15 orders (today/tomorrow/+2/+3 days), 8 flavours, 5 occasions, 6 time slots, 2 sales persons
+- Added "Reset System" button in Settings (Danger Zone) with confirmation dialog — clears all data except super admin
+- Added `POST /api/system-reset` backend endpoint (replaced text input with hour/minute/AM-PM selectors)
 
 ## Prioritized Backlog
 ### P1

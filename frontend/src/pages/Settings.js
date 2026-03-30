@@ -9,7 +9,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Settings as SettingsIcon, Plus, Trash2, Save, Loader2, Clock } from 'lucide-react';
+import { Settings as SettingsIcon, Plus, Trash2, Save, Loader2, Clock, AlertTriangle } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -47,6 +48,9 @@ const Settings = () => {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [resetConfirmText, setResetConfirmText] = useState('');
+  const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
     fetchAllSettings();
@@ -245,6 +249,25 @@ const Settings = () => {
       showSuccess('Time slot deleted successfully');
     } catch (error) {
       showError('Failed to delete time slot');
+    }
+  };
+
+  const handleResetSystem = async () => {
+    if (resetConfirmText !== 'RESET') return;
+    const token = localStorage.getItem('token');
+    setResetting(true);
+    try {
+      await axios.post(`${API}/system-reset`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setResetDialogOpen(false);
+      setResetConfirmText('');
+      fetchAllSettings();
+      showSuccess('System reset successful. All data cleared except super admin.');
+    } catch (err) {
+      showError(err.response?.data?.detail || 'Failed to reset system');
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -630,6 +653,70 @@ const Settings = () => {
             )}
           </CardContent>
         </Card>
+
+        {/* SECTION 6: Reset System (Danger Zone) */}
+        <Card className="border-red-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="h-5 w-5" />
+              Danger Zone
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-medium">Reset System</p>
+                <p className="text-sm text-gray-500">Permanently delete all orders, payments, users (except super admin), outlets, zones, and all other data.</p>
+              </div>
+              <Button
+                variant="destructive"
+                onClick={() => setResetDialogOpen(true)}
+                data-testid="reset-system-btn"
+              >
+                <AlertTriangle className="mr-2 h-4 w-4" />
+                Reset System
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Reset Confirmation Dialog */}
+        <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="text-red-600 flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5" />
+                Reset Entire System
+              </DialogTitle>
+              <DialogDescription>
+                This action will permanently delete ALL data including orders, payments, customers, outlets, zones, users, flavours, occasions, and time slots. Only the super admin account will be preserved.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <p className="text-sm font-medium">Type <span className="font-bold text-red-600">RESET</span> to confirm:</p>
+              <Input
+                value={resetConfirmText}
+                onChange={(e) => setResetConfirmText(e.target.value)}
+                placeholder="Type RESET to confirm"
+                data-testid="reset-confirm-input"
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setResetDialogOpen(false); setResetConfirmText(''); }}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleResetSystem}
+                disabled={resetConfirmText !== 'RESET' || resetting}
+                data-testid="reset-confirm-btn"
+              >
+                {resetting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <AlertTriangle className="mr-2 h-4 w-4" />}
+                {resetting ? 'Resetting...' : 'Reset Everything'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </LayoutWithSidebar>
   );
