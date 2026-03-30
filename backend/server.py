@@ -1310,9 +1310,9 @@ async def sync_petpooja_bill(
 @api_router.post("/orders/{order_id}/mark-credit")
 async def mark_order_as_credit(
     order_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
 ):
-    """Mark an order as credit order"""
+    """Mark order as credit order - bypasses payment threshold and moves to Manage Orders (Super Admin only)"""
     order = await db.orders.find_one({"id": order_id}, {"_id": 0})
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -1321,11 +1321,13 @@ async def mark_order_as_credit(
         {"id": order_id},
         {"$set": {
             "is_credit_order": True,
+            "status": "confirmed",
+            "lifecycle_status": "active",
             "updated_at": datetime.now(timezone.utc).isoformat()
         }}
     )
     
-    return {"message": "Order marked as credit"}
+    return {"message": "Order marked as credit successfully"}
 
 @api_router.post("/orders/{order_id}/release-credit")
 async def release_credit_order(
@@ -2046,28 +2048,6 @@ async def mark_order_ready(
         "transfer_to_outlet_id": transfer_to_outlet_id,
         "ready_at": update_data["ready_at"]
     }
-
-@api_router.post("/orders/{order_id}/mark-credit")
-async def mark_order_as_credit(
-    order_id: str,
-    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
-):
-    """Mark order as credit order - bypasses payment threshold (Super Admin only)"""
-    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
-    
-    if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
-    
-    await db.orders.update_one(
-        {"id": order_id},
-        {"$set": {
-            "is_credit_order": True,
-            "status": "confirmed",
-            "updated_at": datetime.now(timezone.utc)
-        }}
-    )
-    
-    return {"message": "Order marked as credit successfully"}
 
 
 @api_router.post("/orders/{order_id}/upload-actual-photo")
