@@ -30,7 +30,8 @@ import {
   Upload,
   Image as ImageIcon,
   MoreVertical,
-  Trash2
+  Trash2,
+  Camera
 } from 'lucide-react';
 import axios from 'axios';
 import * as XLSX from 'xlsx';
@@ -48,6 +49,12 @@ const STATUS_CONFIG = {
     label: 'Ready',
     color: 'bg-green-500',
     icon: Clock,
+    nextStatus: 'ready_to_deliver'
+  },
+  ready_to_deliver: {
+    label: 'Ready to Deliver',
+    color: 'bg-cyan-500',
+    icon: Truck,
     nextStatus: 'picked_up'
   },
   picked_up: {
@@ -94,6 +101,13 @@ const ManageOrders = () => {
   // New state for edit functionality
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editFormData, setEditFormData] = useState(null);
+  
+  // Camera capture for Ready to Deliver
+  const [cameraDialogOpen, setCameraDialogOpen] = useState(false);
+  const [cameraOrderId, setCameraOrderId] = useState(null);
+  const [capturedPhoto, setCapturedPhoto] = useState(null);
+  const [cameraStream, setCameraStream] = useState(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -353,6 +367,99 @@ const ManageOrders = () => {
     } catch (error) {
       console.error('Failed to upload photo:', error);
       setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to upload photo' });
+    }
+  };
+
+  // ==================== CAMERA CAPTURE FOR READY TO DELIVER ====================
+  const openCameraForDelivery = async (orderId) => {
+    setCameraOrderId(orderId);
+    setCapturedPhoto(null);
+    setCameraDialogOpen(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } 
+      });
+      setCameraStream(stream);
+      setTimeout(() => {
+        const video = document.getElementById('camera-preview');
+        if (video) video.srcObject = stream;
+      }, 100);
+    } catch (err) {
+      console.error('Camera access failed:', err);
+      setMessage({ type: 'error', text: 'Camera access denied. Please allow camera permission.' });
+      setCameraDialogOpen(false);
+    }
+  };
+
+  const capturePhoto = () => {
+    const video = document.getElementById('camera-preview');
+    if (!video) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    canvas.toBlob((blob) => {
+      setCapturedPhoto(blob);
+      const url = URL.createObjectURL(blob);
+      setCapturedPhoto({ blob, url });
+    }, 'image/jpeg', 0.85);
+    stopCamera();
+  };
+
+  const stopCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+      setCameraStream(null);
+    }
+  };
+
+  const retakePhoto = async () => {
+    setCapturedPhoto(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } 
+      });
+      setCameraStream(stream);
+      setTimeout(() => {
+        const video = document.getElementById('camera-preview');
+        if (video) video.srcObject = stream;
+      }, 100);
+    } catch (err) {
+      console.error('Camera restart failed:', err);
+    }
+  };
+
+  const closeCameraDialog = () => {
+    stopCamera();
+    setCameraDialogOpen(false);
+    setCameraOrderId(null);
+    setCapturedPhoto(null);
+  };
+
+  const uploadCapturedAndMarkDelivery = async () => {
+    if (!capturedPhoto?.blob || !cameraOrderId) return;
+    setUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', capturedPhoto.blob, 'cake-photo.jpg');
+      const uploadRes = await axios.post(`${API_URL}/api/upload-image`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data', 'Authorization': `Bearer ${token}` }
+      });
+      const imageUrl = uploadRes.data.url;
+      await axios.post(
+        `${API_URL}/api/orders/${cameraOrderId}/ready-to-deliver?image_url=${encodeURIComponent(imageUrl)}`,
+        {},
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+      closeCameraDialog();
+      setMessage({ type: 'success', text: 'Order marked as Ready to Deliver! Incentive calculated.' });
+      fetchOrders();
+      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+    } catch (error) {
+      console.error('Upload failed:', error);
+      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to upload photo' });
+    } finally {
+      setUploadingPhoto(false);
     }
   };
 
@@ -988,6 +1095,19 @@ const ManageOrders = () => {
                                   <Badge className="bg-green-600 text-white text-xs">✓ Photo</Badge>
                                 )}
                                 
+                                {/* Ready to Deliver Button - Camera capture */}
+                                {order.status === 'ready' && !order.actual_cake_image_url && (
+                                  <Button
+                                    size="sm"
+                                    className="bg-cyan-600 hover:bg-cyan-700 text-white text-xs"
+                                    onClick={() => openCameraForDelivery(order.id)}
+                                    data-testid={`ready-to-deliver-btn-${order.id}`}
+                                  >
+                                    <Upload className="h-3 w-3 mr-1" />
+                                    Ready to Deliver
+                                  </Button>
+                                )}
+
                                 {/* Status Dropdown */}
                                 <Select 
                                   value={order.status}
@@ -1000,6 +1120,9 @@ const ManageOrders = () => {
                                     <SelectItem value="confirmed">Confirmed</SelectItem>
                                     <SelectItem value="preparing">Preparing</SelectItem>
                                     <SelectItem value="ready">Ready</SelectItem>
+                                    <SelectItem value="ready_to_deliver" disabled={!order.actual_cake_image_url}>
+                                      Ready to Deliver {!order.actual_cake_image_url && '(Photo Required)'}
+                                    </SelectItem>
                                     <SelectItem 
                                       value="picked_up"
                                       disabled={!order.actual_cake_image_url}
@@ -1457,6 +1580,63 @@ const ManageOrders = () => {
           </DialogContent>
         </Dialog>
 
+          </DialogContent>
+        </Dialog>
+
+        {/* Camera Capture Dialog for Ready to Deliver */}
+        <Dialog open={cameraDialogOpen} onOpenChange={(open) => { if (!open) closeCameraDialog(); }}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Capture Cake Photo</DialogTitle>
+              <DialogDescription>Take a photo of the ready cake to mark this order as ready for delivery</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              {!capturedPhoto ? (
+                <div className="relative">
+                  <video 
+                    id="camera-preview" 
+                    autoPlay 
+                    playsInline 
+                    muted
+                    className="w-full rounded-lg bg-black aspect-video"
+                  />
+                  <Button 
+                    onClick={capturePhoto} 
+                    className="w-full mt-3 bg-pink-600 hover:bg-pink-700 text-white"
+                    data-testid="capture-photo-btn"
+                  >
+                    <ImageIcon className="h-4 w-4 mr-2" />
+                    Capture Photo
+                  </Button>
+                </div>
+              ) : (
+                <div>
+                  <img 
+                    src={capturedPhoto.url} 
+                    alt="Captured cake" 
+                    className="w-full rounded-lg"
+                  />
+                  <div className="flex gap-2 mt-3">
+                    <Button 
+                      variant="outline" 
+                      className="flex-1" 
+                      onClick={retakePhoto}
+                      data-testid="retake-photo-btn"
+                    >
+                      Retake
+                    </Button>
+                    <Button 
+                      className="flex-1 bg-cyan-600 hover:bg-cyan-700 text-white" 
+                      onClick={uploadCapturedAndMarkDelivery}
+                      disabled={uploadingPhoto}
+                      data-testid="confirm-ready-deliver-btn"
+                    >
+                      {uploadingPhoto ? 'Uploading...' : 'Confirm & Mark Ready to Deliver'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
           </DialogContent>
         </Dialog>
       </div>

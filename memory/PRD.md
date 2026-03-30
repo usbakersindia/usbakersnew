@@ -28,6 +28,16 @@ Comprehensive CRM and management system for a multi-outlet bakery chain named "U
 - Fixed Payments.js JSX syntax error (missing React fragment wrapper for pagination)
 - Implemented Clock/Time Picker for Delivery Time Slots in Settings
 - Fixed Kitchen Dashboard logout button missing in empty state (no orders) view
+- Created seed script (`backend/seed_data.py`) with dummy data
+- Added "Reset System" button in Settings (Danger Zone)
+- Fixed "Mark as Credit" flow (now changes lifecycle_status to active)
+- Special Instructions: multi-line bullet format in NewOrder, Kitchen Dashboard, ManageOrders
+- Audio instructions: added native `<audio controls>` player in Kitchen Dashboard
+- **Ready to Deliver flow**: Kitchen marks ready → Branch captures cake photo via camera → Auto-marks "ready_to_deliver" → Incentive calculated
+- **New status: `ready_to_deliver`** added to OrderStatus enum
+- **Camera capture popup** in ManageOrders for branch/counter staff
+- **Delivery Dashboard**: Mobile-optimized, real-time available orders, accept flow, Navigate + Delivered buttons
+- New API endpoints: `POST /api/orders/{id}/ready-to-deliver`, `GET /api/delivery/available-orders`, `POST /api/delivery/accept-order/{id}`, `GET /api/delivery/my-orders`
 - Created seed script (`backend/seed_data.py`) with dummy data: 3 outlets, 9 zones, 5 users, 15 orders (today/tomorrow/+2/+3 days), 8 flavours, 5 occasions, 6 time slots, 2 sales persons
 - Added "Reset System" button in Settings (Danger Zone) with confirmation dialog — clears all data except super admin
 - Added `POST /api/system-reset` backend endpoint (replaced text input with hour/minute/AM-PM selectors)

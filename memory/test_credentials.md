@@ -8,7 +8,7 @@
 - Email: kitchen@usbakers.com
 - Password: kitchen123
 
-## Outlet Admin
+## Outlet Admin (Branch/Counter)
 - Email: outlet@usbakers.com
 - Password: outlet123
 
@@ -19,3 +19,7 @@
 ## Factory Manager
 - Email: factory@usbakers.com
 - Password: factory123
+
+## Delivery Person
+- Email: delivery@usbakers.com
+- Password: delivery123

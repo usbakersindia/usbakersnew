@@ -66,6 +66,7 @@ class OrderStatus(str, Enum):
     ON_HOLD = "on_hold"  # Hold order, incomplete info
     CONFIRMED = "confirmed"  # Active order in manage orders
     READY = "ready"
+    READY_TO_DELIVER = "ready_to_deliver"  # Photo uploaded, ready for delivery person
     PICKED_UP = "picked_up"
     REACHED = "reached"
     DELIVERED = "delivered"
@@ -2134,6 +2135,98 @@ async def calculate_incentive_for_order(order_id: str, order: dict):
     
     logger.info(f"Incentive calculated for order {order_id}: ₹{incentive_amount:.2f} for {sales_person.get('name')}")
 
+# ==================== READY TO DELIVER (Counter/Branch Flow) ====================
+
+@api_router.post("/orders/{order_id}/ready-to-deliver")
+async def mark_ready_to_deliver(
+    order_id: str,
+    image_url: str,
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.OUTLET_ADMIN, UserRole.ORDER_MANAGER]))
+):
+    """Counter/Branch marks order as ready to deliver after uploading cake photo.
+    This triggers incentive calculation and makes the order visible to delivery persons."""
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    if order.get('status') != 'ready':
+        raise HTTPException(status_code=400, detail="Order must be marked as 'ready' by kitchen first")
+    
+    update_data = {
+        "status": "ready_to_deliver",
+        "actual_cake_image_url": image_url,
+        "photo_uploaded_at": datetime.now(timezone.utc).isoformat(),
+        "photo_uploaded_by": current_user.id,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.orders.update_one({"id": order_id}, {"$set": update_data})
+    
+    # Trigger incentive calculation
+    try:
+        await calculate_incentive_for_order(order_id, order)
+    except Exception as e:
+        logger.error(f"Failed to calculate incentive for order {order_id}: {str(e)}")
+    
+    return {
+        "message": "Order marked as ready to deliver. Incentive calculated.",
+        "actual_cake_image_url": image_url
+    }
+
+@api_router.get("/delivery/available-orders")
+async def get_available_delivery_orders(
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.DELIVERY]))
+):
+    """Get orders that are ready to deliver and not yet accepted by any delivery person"""
+    query = {
+        "status": "ready_to_deliver",
+        "is_deleted": False,
+        "needs_delivery": True,
+        "assigned_delivery_partner": None
+    }
+    orders = await db.orders.find(query, {"_id": 0}).sort("delivery_date", 1).to_list(100)
+    return orders
+
+@api_router.post("/delivery/accept-order/{order_id}")
+async def accept_delivery_order(
+    order_id: str,
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.DELIVERY]))
+):
+    """Delivery person accepts an order for delivery"""
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    if order.get('status') != 'ready_to_deliver':
+        raise HTTPException(status_code=400, detail="Order is not ready for delivery")
+    
+    if order.get('assigned_delivery_partner'):
+        raise HTTPException(status_code=400, detail="Order already accepted by another delivery person")
+    
+    await db.orders.update_one(
+        {"id": order_id},
+        {"$set": {
+            "assigned_delivery_partner": current_user.id,
+            "status": "picked_up",
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    return {"message": "Order accepted for delivery"}
+
+@api_router.get("/delivery/my-orders")
+async def get_my_delivery_orders(
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.DELIVERY]))
+):
+    """Get orders assigned to the current delivery person"""
+    query = {
+        "assigned_delivery_partner": current_user.id,
+        "is_deleted": False,
+        "status": {"$in": ["picked_up", "reached", "delivered"]}
+    }
+    orders = await db.orders.find(query, {"_id": 0}).sort("updated_at", -1).to_list(100)
+    return orders
+
 @api_router.patch("/orders/{order_id}/status")
 async def update_order_status(
     order_id: str,
@@ -2597,7 +2690,7 @@ async def get_delivery_summary(
     
     all_orders = await db.orders.find(query, {"_id": 0}).to_list(1000)
     
-    ready = sum(1 for o in all_orders if o.get('status') == OrderStatus.READY.value)
+    ready = sum(1 for o in all_orders if o.get('status') in [OrderStatus.READY.value, 'ready_to_deliver'])
     picked_up = sum(1 for o in all_orders if o.get('status') == OrderStatus.PICKED_UP.value)
     reached = sum(1 for o in all_orders if o.get('status') == OrderStatus.REACHED.value)
     

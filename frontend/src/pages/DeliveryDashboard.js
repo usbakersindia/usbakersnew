@@ -1,293 +1,320 @@
-import { useEffect, useState } from 'react';
-import axios from 'axios';
-import LayoutWithSidebar from '../components/LayoutWithSidebar';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Truck, MapPin, CheckCircle, Clock } from 'lucide-react';
+import {
+  Truck, MapPin, Phone, User, Clock, Package,
+  CheckCircle, LogOut, Navigation, RefreshCw
+} from 'lucide-react';
+import axios from 'axios';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+const API_URL = process.env.REACT_APP_BACKEND_URL;
 
 const DeliveryDashboard = () => {
-  const [orders, setOrders] = useState([]);
-  const [summary, setSummary] = useState(null);
-  const [selectedOrder, setSelectedOrder] = useState(null);
-  const [otpDialogOpen, setOtpDialogOpen] = useState(false);
-  const [otp, setOtp] = useState('');
-  const [loading, setLoading] = useState(false);
+  const { token, user, logout } = useAuth();
+  const [activeTab, setActiveTab] = useState('available');
+  const [availableOrders, setAvailableOrders] = useState([]);
+  const [myOrders, setMyOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [accepting, setAccepting] = useState(null);
+
+  const fetchOrders = useCallback(async () => {
+    try {
+      const [availRes, myRes] = await Promise.all([
+        axios.get(`${API_URL}/api/delivery/available-orders`, {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        axios.get(`${API_URL}/api/delivery/my-orders`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+      ]);
+      setAvailableOrders(availRes.data);
+      setMyOrders(myRes.data);
+    } catch (err) {
+      console.error('Failed to fetch delivery orders:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
 
   useEffect(() => {
     fetchOrders();
-    fetchSummary();
-  }, []);
+    const interval = setInterval(fetchOrders, 15000);
+    return () => clearInterval(interval);
+  }, [fetchOrders]);
 
-  const fetchOrders = async () => {
+  const acceptOrder = async (orderId) => {
+    setAccepting(orderId);
     try {
-      const response = await axios.get(`${API}/delivery/orders`);
-      setOrders(response.data);
-    } catch (error) {
-      console.error('Failed to fetch orders:', error);
-    }
-  };
-
-  const fetchSummary = async () => {
-    try {
-      const response = await axios.get(`${API}/delivery/summary`);
-      setSummary(response.data);
-    } catch (error) {
-      console.error('Failed to fetch summary:', error);
-    }
-  };
-
-  const updateOrderStatus = async (orderId, newStatus) => {
-    setLoading(true);
-    try {
-      await axios.patch(`${API}/orders/${orderId}/status`, {
-        status: newStatus
+      await axios.post(`${API_URL}/api/delivery/accept-order/${orderId}`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
       });
       fetchOrders();
-      fetchSummary();
-      alert(`Order status updated to ${newStatus}`);
-    } catch (error) {
-      console.error('Failed to update status:', error);
-      alert('Failed to update status');
+      setActiveTab('my');
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to accept order');
     } finally {
-      setLoading(false);
+      setAccepting(null);
     }
   };
 
-  const openOtpDialog = (order) => {
-    setSelectedOrder(order);
-    setOtp('');
-    setOtpDialogOpen(true);
-  };
-
-  const verifyAndDeliver = async () => {
-    if (otp.length !== 6) {
-      alert('OTP must be 6 digits');
-      return;
-    }
-
-    setLoading(true);
+  const updateDeliveryStatus = async (orderId, status) => {
     try {
-      await axios.post(`${API}/delivery/verify-otp`, {
-        order_id: selectedOrder.id,
-        otp: otp
-      });
-      alert('Order delivered successfully!');
-      setOtpDialogOpen(false);
+      await axios.patch(`${API_URL}/api/orders/${orderId}/status`, 
+        { status },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
       fetchOrders();
-      fetchSummary();
-    } catch (error) {
-      alert(error.response?.data?.detail || 'Invalid OTP');
-    } finally {
-      setLoading(false);
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to update status');
     }
   };
 
-  const getStatusColor = (status) => {
-    const colors = {
-      ready: 'bg-blue-100 text-blue-800',
-      picked_up: 'bg-purple-100 text-purple-800',
-      reached: 'bg-orange-100 text-orange-800',
-      delivered: 'bg-green-500 text-white'
-    };
-    return colors[status] || 'bg-gray-100 text-gray-800';
+  const handleLogout = () => {
+    logout();
   };
 
-  return (
-    <LayoutWithSidebar>
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold">Delivery Dashboard</h1>
-          <Button onClick={fetchOrders} variant="outline">
-            Refresh
-          </Button>
+  const OrderCard = ({ order, type }) => (
+    <Card className="mb-3 border-l-4" style={{ borderLeftColor: type === 'available' ? '#06b6d4' : '#8b5cf6' }}>
+      <CardContent className="p-4">
+        <div className="flex justify-between items-start mb-3">
+          <div>
+            <span className="font-bold text-lg" data-testid={`order-num-${order.order_number}`}>#{order.order_number}</span>
+            <Badge className="ml-2 text-xs" variant="outline">
+              {order.status === 'ready_to_deliver' ? 'Ready' : order.status === 'picked_up' ? 'Picked Up' : order.status}
+            </Badge>
+          </div>
+          <span className="text-sm text-gray-500">
+            <Clock className="h-3 w-3 inline mr-1" />
+            {order.delivery_time}
+          </span>
         </div>
 
-        {/* Summary Cards */}
-        {summary && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">Ready for Pickup</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-blue-600">{summary.ready}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">Picked Up</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-purple-600">{summary.picked_up}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">Reached</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-orange-600">{summary.reached}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">Delivered Today</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-green-600">{summary.delivered_today}</div>
-              </CardContent>
-            </Card>
+        {/* Cake Photo */}
+        {order.actual_cake_image_url && (
+          <div className="mb-3">
+            <img 
+              src={order.actual_cake_image_url.startsWith('http') ? order.actual_cake_image_url : `${API_URL}${order.actual_cake_image_url}`}
+              alt="Cake" 
+              className="w-full h-40 object-cover rounded-lg"
+            />
           </div>
         )}
 
-        {/* Orders Table */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Delivery Orders ({orders.length})</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Order #</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Delivery Address</TableHead>
-                  <TableHead>Delivery Date/Time</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {orders.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center text-gray-500">
-                      No delivery orders found
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  orders.map(order => (
-                    <TableRow key={order.id}>
-                      <TableCell className="font-medium">{order.order_number}</TableCell>
-                      <TableCell>
-                        <div className="text-sm">
-                          <div>{order.customer_info?.name}</div>
-                          <div className="text-gray-500">{order.customer_info?.phone}</div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="max-w-xs">
-                        <div className="text-sm">
-                          {order.delivery_address}
-                          {order.delivery_city && `, ${order.delivery_city}`}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">
-                          <div>{order.delivery_date}</div>
-                          <div className="text-gray-500">{order.delivery_time}</div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={getStatusColor(order.status)}>
-                          {order.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
-                          {order.status === 'ready' && (
-                            <Button
-                              size="sm"
-                              onClick={() => updateOrderStatus(order.id, 'picked_up')}
-                              disabled={loading}
-                            >
-                              <Truck className="h-4 w-4 mr-1" />
-                              Pick Up
-                            </Button>
-                          )}
-                          {order.status === 'picked_up' && (
-                            <Button
-                              size="sm"
-                              onClick={() => updateOrderStatus(order.id, 'reached')}
-                              disabled={loading}
-                            >
-                              <MapPin className="h-4 w-4 mr-1" />
-                              Reached
-                            </Button>
-                          )}
-                          {order.status === 'reached' && (
-                            <Button
-                              size="sm"
-                              onClick={() => openOtpDialog(order)}
-                              disabled={loading}
-                              className="bg-green-600 hover:bg-green-700"
-                            >
-                              <CheckCircle className="h-4 w-4 mr-1" />
-                              Deliver (OTP)
-                            </Button>
-                          )}
-                          {order.status === 'delivered' && (
-                            <Badge className="bg-green-500 text-white">
-                              <CheckCircle className="h-3 w-3 mr-1" />
-                              Delivered
-                            </Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+        {/* Customer Info */}
+        <div className="space-y-2 mb-3">
+          <div className="flex items-center gap-2 text-sm">
+            <User className="h-4 w-4 text-gray-400" />
+            <span className="font-medium">{order.customer_info?.name}</span>
+          </div>
+          {order.customer_info?.phone && (
+            <a href={`tel:${order.customer_info.phone}`} className="flex items-center gap-2 text-sm text-blue-600">
+              <Phone className="h-4 w-4" />
+              {order.customer_info.phone}
+            </a>
+          )}
+          {order.delivery_address && (
+            <div className="flex items-start gap-2 text-sm">
+              <MapPin className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+              <span>{order.delivery_address}{order.delivery_city ? `, ${order.delivery_city}` : ''}</span>
+            </div>
+          )}
+        </div>
 
-        {/* OTP Verification Dialog */}
-        {selectedOrder && (
-          <Dialog open={otpDialogOpen} onOpenChange={setOtpDialogOpen}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Verify OTP - Order #{selectedOrder.order_number}</DialogTitle>
-                <DialogDescription>
-                  Ask customer for 6-digit OTP to confirm delivery
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div>
-                  <Label>Customer: {selectedOrder.customer_info?.name}</Label>
-                  <p className="text-sm text-gray-500">{selectedOrder.customer_info?.phone}</p>
-                </div>
-                <div>
-                  <Label htmlFor="otp">Enter OTP</Label>
-                  <Input
-                    id="otp"
-                    type="text"
-                    maxLength={6}
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                    placeholder="Enter 6-digit OTP"
-                    className="text-center text-2xl tracking-widest"
-                  />
-                </div>
-                <Button 
-                  onClick={verifyAndDeliver} 
-                  className="w-full bg-green-600 hover:bg-green-700"
-                  disabled={otp.length !== 6 || loading}
+        {/* Order details */}
+        <div className="bg-gray-50 rounded-lg p-3 mb-3 text-sm space-y-1">
+          <div className="flex justify-between">
+            <span className="text-gray-500">Flavour</span>
+            <span className="font-medium">{order.flavour}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-500">Size</span>
+            <span className="font-medium">{order.size_pounds} Pounds</span>
+          </div>
+          {order.name_on_cake && (
+            <div className="flex justify-between">
+              <span className="text-gray-500">Message</span>
+              <span className="font-medium">{order.name_on_cake}</span>
+            </div>
+          )}
+          <div className="flex justify-between">
+            <span className="text-gray-500">Date</span>
+            <span className="font-medium">{order.delivery_date}</span>
+          </div>
+        </div>
+
+        {/* Special Instructions */}
+        {order.special_instructions && (
+          <div className="bg-yellow-50 rounded-lg p-3 mb-3 border border-yellow-200">
+            <p className="text-xs font-semibold text-yellow-700 mb-1">Instructions</p>
+            <ul className="list-disc list-inside text-sm space-y-0.5">
+              {order.special_instructions.split('\n').filter(l => l.trim()).map((line, i) => (
+                <li key={i}>{line.trim()}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Action Buttons */}
+        {type === 'available' && (
+          <Button
+            className="w-full bg-cyan-600 hover:bg-cyan-700 text-white"
+            onClick={() => acceptOrder(order.id)}
+            disabled={accepting === order.id}
+            data-testid={`accept-order-btn-${order.id}`}
+          >
+            {accepting === order.id ? (
+              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <CheckCircle className="h-4 w-4 mr-2" />
+            )}
+            {accepting === order.id ? 'Accepting...' : 'Accept Order'}
+          </Button>
+        )}
+
+        {type === 'my' && order.status === 'picked_up' && (
+          <div className="flex gap-2">
+            <a 
+              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.delivery_address || '')}`}
+              target="_blank"
+              rel="noreferrer"
+              className="flex-1"
+            >
+              <Button variant="outline" className="w-full text-blue-600 border-blue-300">
+                <Navigation className="h-4 w-4 mr-2" />
+                Navigate
+              </Button>
+            </a>
+            <Button
+              className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+              onClick={() => updateDeliveryStatus(order.id, 'delivered')}
+              data-testid={`mark-delivered-btn-${order.id}`}
+            >
+              <CheckCircle className="h-4 w-4 mr-2" />
+              Delivered
+            </Button>
+          </div>
+        )}
+
+        {type === 'my' && order.status === 'delivered' && (
+          <div className="text-center py-2 text-green-600 font-medium text-sm">
+            <CheckCircle className="h-4 w-4 inline mr-1" />
+            Delivered Successfully
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <RefreshCw className="h-8 w-8 animate-spin text-cyan-600" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50" style={{ maxWidth: '480px', margin: '0 auto' }}>
+      {/* Header */}
+      <div className="sticky top-0 z-10 bg-white border-b px-4 py-3 flex justify-between items-center shadow-sm">
+        <div className="flex items-center gap-2">
+          <Truck className="h-5 w-5" style={{ color: '#e92587' }} />
+          <span className="font-bold text-lg">Delivery</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-gray-500">{user?.name}</span>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleLogout}
+            data-testid="delivery-logout-btn"
+          >
+            <LogOut className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Tab Bar */}
+      <div className="flex bg-white border-b">
+        <button
+          onClick={() => setActiveTab('available')}
+          className={`flex-1 py-3 text-center text-sm font-medium relative ${
+            activeTab === 'available' ? 'text-cyan-600' : 'text-gray-500'
+          }`}
+          data-testid="tab-available-orders"
+        >
+          <Package className="h-4 w-4 inline mr-1" />
+          Available ({availableOrders.length})
+          {activeTab === 'available' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-cyan-600" />}
+        </button>
+        <button
+          onClick={() => setActiveTab('my')}
+          className={`flex-1 py-3 text-center text-sm font-medium relative ${
+            activeTab === 'my' ? 'text-purple-600' : 'text-gray-500'
+          }`}
+          data-testid="tab-my-orders"
+        >
+          <Truck className="h-4 w-4 inline mr-1" />
+          My Orders ({myOrders.length})
+          {activeTab === 'my' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600" />}
+        </button>
+      </div>
+
+      {/* Order List */}
+      <div className="p-3">
+        {activeTab === 'available' && (
+          <>
+            {availableOrders.length === 0 ? (
+              <div className="text-center py-16 text-gray-400">
+                <Package className="h-12 w-12 mx-auto mb-3" />
+                <p className="font-medium">No orders available</p>
+                <p className="text-sm mt-1">New orders will appear here in real-time</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-4"
+                  onClick={fetchOrders}
                 >
-                  {loading ? 'Verifying...' : 'Verify & Mark Delivered'}
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh
                 </Button>
               </div>
-            </DialogContent>
-          </Dialog>
+            ) : (
+              availableOrders.map(order => (
+                <OrderCard key={order.id} order={order} type="available" />
+              ))
+            )}
+          </>
+        )}
+
+        {activeTab === 'my' && (
+          <>
+            {myOrders.length === 0 ? (
+              <div className="text-center py-16 text-gray-400">
+                <Truck className="h-12 w-12 mx-auto mb-3" />
+                <p className="font-medium">No accepted orders</p>
+                <p className="text-sm mt-1">Accept an available order to get started</p>
+              </div>
+            ) : (
+              myOrders.map(order => (
+                <OrderCard key={order.id} order={order} type="my" />
+              ))
+            )}
+          </>
         )}
       </div>
-    </LayoutWithSidebar>
+
+      {/* Floating refresh button */}
+      <button
+        onClick={fetchOrders}
+        className="fixed bottom-6 right-6 bg-cyan-600 text-white p-3 rounded-full shadow-lg hover:bg-cyan-700 active:scale-95 transition-all"
+        data-testid="refresh-orders-btn"
+      >
+        <RefreshCw className="h-5 w-5" />
+      </button>
+    </div>
   );
 };
 
