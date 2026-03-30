@@ -156,8 +156,9 @@ const KitchenDashboardNew = () => {
   };
 
   const playVoiceInstruction = (url) => {
-    const audio = new Audio(`${BACKEND_URL}${url}`);
-    audio.play();
+    const fullUrl = url.startsWith('http') ? url : `${BACKEND_URL}${url}`;
+    const audio = new Audio(fullUrl);
+    audio.play().catch(err => console.error('Audio playback failed:', err));
   };
 
   if (loading) {
@@ -376,7 +377,11 @@ const KitchenDashboardNew = () => {
                             <MessageSquare className="h-5 w-5 text-yellow-600" />
                             Special Instructions
                           </h3>
-                          <p className="text-sm">{currentOrder.special_instructions}</p>
+                          <ul className="list-disc list-inside space-y-1">
+                            {currentOrder.special_instructions.split('\n').filter(line => line.trim()).map((line, idx) => (
+                              <li key={idx} className="text-sm">{line.trim()}</li>
+                            ))}
+                          </ul>
                         </div>
                       )}
 
@@ -387,11 +392,17 @@ const KitchenDashboardNew = () => {
                             <Volume2 className="h-5 w-5 text-purple-600" />
                             Voice Instruction
                           </h3>
+                          <audio
+                            controls
+                            src={currentOrder.voice_instruction_url.startsWith('http') ? currentOrder.voice_instruction_url : `${BACKEND_URL}${currentOrder.voice_instruction_url}`}
+                            className="w-full"
+                            data-testid="voice-instruction-audio"
+                          />
                           <Button
                             size="sm"
                             variant="outline"
                             onClick={() => playVoiceInstruction(currentOrder.voice_instruction_url)}
-                            className="w-full"
+                            className="w-full mt-2"
                           >
                             <Play className="h-4 w-4 mr-2" />
                             Play Voice Message

@@ -696,11 +696,12 @@ const NewOrder = () => {
               </div>
 
               <div>
-                <Label>Special Instructions</Label>
+                <Label>Special Instructions (one per line)</Label>
                 <Textarea
                   value={formData.special_instructions}
                   onChange={(e) => setFormData({ ...formData, special_instructions: e.target.value })}
-                  placeholder="Add any special instructions here..."
+                  placeholder={"Enter each instruction on a new line, e.g.:\nExtra cream on top\nNo fondant\nWrite name in red color"}
+                  rows={4}
                 />
               </div>
 

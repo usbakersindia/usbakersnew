@@ -1189,7 +1189,11 @@ const ManageOrders = () => {
                   <div>
                     <Label>Special Instructions</Label>
                     <div className="mt-1 p-3 bg-gray-50 rounded border">
-                      {selectedOrder.special_instructions}
+                      <ul className="list-disc list-inside space-y-1">
+                        {selectedOrder.special_instructions.split('\n').filter(line => line.trim()).map((line, idx) => (
+                          <li key={idx} className="text-sm">{line.trim()}</li>
+                        ))}
+                      </ul>
                     </div>
                   </div>
                 )}
