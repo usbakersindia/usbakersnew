@@ -176,7 +176,23 @@ const KitchenDashboardNew = () => {
   if (orders.length === 0) {
     return (
       <div className="min-h-screen bg-gray-50 p-4">
-        <div className="flex items-center justify-center h-screen">
+        <div className="flex justify-between items-center mb-4">
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <ChefHat className="h-6 w-6" style={{ color: '#e92587' }} />
+            Kitchen Dashboard
+          </h1>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleLogout}
+            className="flex items-center gap-2"
+            data-testid="kitchen-logout-btn"
+          >
+            <LogOut className="h-4 w-4" />
+            Logout
+          </Button>
+        </div>
+        <div className="flex items-center justify-center" style={{ height: 'calc(100vh - 100px)' }}>
           <Card className="max-w-md">
             <CardContent className="pt-6 text-center">
               <ChefHat className="h-16 w-16 mx-auto mb-4 text-gray-400" />
