@@ -1147,6 +1147,13 @@ async def create_time_slot(
     """Create a new delivery time slot (Super Admin only)"""
     existing = await db.delivery_time_slots.find_one({"time_slot": slot_data.time_slot}, {"_id": 0})
     if existing:
+        if not existing.get('is_active', True):
+            # Reactivate soft-deleted slot
+            await db.delivery_time_slots.update_one(
+                {"time_slot": slot_data.time_slot},
+                {"$set": {"is_active": True}}
+            )
+            return {"message": "Time slot reactivated successfully", "time_slot": {**existing, "is_active": True}}
         raise HTTPException(status_code=400, detail="Time slot already exists")
     
     slot = DeliveryTimeSlot(
