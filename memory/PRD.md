@@ -37,7 +37,7 @@ Comprehensive CRM and management system for a multi-outlet bakery chain named "U
 - **New status: `ready_to_deliver`** added to OrderStatus enum
 - **Camera capture popup** in ManageOrders for branch/counter staff
 - **Delivery Dashboard**: Mobile-optimized, real-time available orders, accept flow, Navigate + Delivered buttons
-- New API endpoints: `POST /api/orders/{id}/ready-to-deliver`, `GET /api/delivery/available-orders`, `POST /api/delivery/accept-order/{id}`, `GET /api/delivery/my-orders`
+- **Cake Image Report**: Redesigned with Order ID, Customer Name, Phone Number filters + side-by-side comparison layout with pagination
 - Created seed script (`backend/seed_data.py`) with dummy data: 3 outlets, 9 zones, 5 users, 15 orders (today/tomorrow/+2/+3 days), 8 flavours, 5 occasions, 6 time slots, 2 sales persons
 - Added "Reset System" button in Settings (Danger Zone) with confirmation dialog — clears all data except super admin
 - Added `POST /api/system-reset` backend endpoint (replaced text input with hour/minute/AM-PM selectors)
