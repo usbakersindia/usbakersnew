@@ -43,12 +43,18 @@ const STATUS_CONFIG = {
     label: 'Confirmed',
     color: 'bg-blue-500',
     icon: CheckCircle,
+    nextStatus: 'in_progress'
+  },
+  in_progress: {
+    label: 'Preparing',
+    color: 'bg-orange-500',
+    icon: Clock,
     nextStatus: 'ready'
   },
   ready: {
     label: 'Ready',
     color: 'bg-green-500',
-    icon: Clock,
+    icon: CheckCircle,
     nextStatus: 'ready_to_deliver'
   },
   ready_to_deliver: {
@@ -109,9 +115,19 @@ const ManageOrders = () => {
   const [cameraStream, setCameraStream] = useState(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   
+  // Delivery assignment
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [assignOrderId, setAssignOrderId] = useState(null);
+  const [deliveryPersons, setDeliveryPersons] = useState([]);
+  const [selectedDeliveryPerson, setSelectedDeliveryPerson] = useState('');
+  const [assigning, setAssigning] = useState(false);
+  
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
+  
+  // Bulk selection for KOT
+  const [selectedOrderIds, setSelectedOrderIds] = useState([]);
   
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -131,6 +147,7 @@ const ManageOrders = () => {
   useEffect(() => {
     fetchOrders();
     fetchOutlets();
+    fetchDeliveryPersons();
   }, []);
 
   useEffect(() => {
@@ -160,6 +177,43 @@ const ManageOrders = () => {
       setOutlets(response.data);
     } catch (error) {
       console.error('Error fetching outlets:', error);
+    }
+  };
+
+  const fetchDeliveryPersons = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/api/delivery/persons`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setDeliveryPersons(response.data);
+    } catch (error) {
+      console.error('Error fetching delivery persons:', error);
+    }
+  };
+
+  const openAssignDialog = (orderId) => {
+    setAssignOrderId(orderId);
+    setSelectedDeliveryPerson('');
+    setAssignDialogOpen(true);
+  };
+
+  const handleAssignDelivery = async () => {
+    if (!selectedDeliveryPerson || !assignOrderId) return;
+    setAssigning(true);
+    try {
+      await axios.post(
+        `${API_URL}/api/delivery/assign-order/${assignOrderId}?delivery_person_id=${selectedDeliveryPerson}`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setAssignDialogOpen(false);
+      setMessage({ type: 'success', text: 'Delivery person assigned successfully' });
+      fetchOrders();
+      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+    } catch (error) {
+      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to assign delivery' });
+    } finally {
+      setAssigning(false);
     }
   };
 
@@ -399,7 +453,6 @@ const ManageOrders = () => {
     canvas.height = video.videoHeight;
     canvas.getContext('2d').drawImage(video, 0, 0);
     canvas.toBlob((blob) => {
-      setCapturedPhoto(blob);
       const url = URL.createObjectURL(blob);
       setCapturedPhoto({ blob, url });
     }, 'image/jpeg', 0.85);
@@ -693,12 +746,8 @@ const ManageOrders = () => {
               <span class="item-value">${order.order_taken_by || 'N/A'}</span>
             </div>
             <div class="item">
-              <span class="item-label">Branch:</span>
-              <span class="item-value">${outletName}</span>
-            </div>
-            <div class="item">
-              <span class="item-label">Delivery Status:</span>
-              <span class="item-value">${order.status.toUpperCase()}</span>
+              <span class="item-label">Delivery:</span>
+              <span class="item-value">${order.delivery_date} | ${order.delivery_time} | ${order.status.replace(/_/g, ' ').toUpperCase()}</span>
             </div>
           </div>
           
@@ -742,27 +791,17 @@ const ManageOrders = () => {
             </div>
           </div>
           
-          <div class="section">
-            <div class="section-title">Delivery Information</div>
-            <div class="item">
-              <span class="item-label">Delivery Date:</span>
-              <span class="item-value">${order.delivery_date}</span>
-            </div>
-            <div class="item">
-              <span class="item-label">Delivery Time:</span>
-              <span class="item-value">${order.delivery_time}</span>
-            </div>
-          </div>
-          
           ${order.special_instructions ? `
           <div class="highlight">
-            <div style="color: #856404; margin-bottom: 5px;">⚠️ SPECIAL INSTRUCTIONS:</div>
-            ${order.special_instructions}
+            <div style="color: #856404; margin-bottom: 5px;">SPECIAL INSTRUCTIONS:</div>
+            <ul style="margin: 0; padding-left: 20px;">
+              ${order.special_instructions.split('\n').filter(l => l.trim()).map(l => `<li>${l.trim()}</li>`).join('')}
+            </ul>
           </div>
           ` : ''}
           
           <div class="section">
-            <div class="section-title">Payment & PetPooja Details</div>
+            <div class="section-title">Payment Details</div>
             <div class="item">
               <span class="item-label">Total Amount:</span>
               <span class="item-value">₹${order.total_amount.toFixed(2)}</span>
@@ -772,13 +811,9 @@ const ManageOrders = () => {
               <span class="item-value">₹${order.paid_amount ? order.paid_amount.toFixed(2) : '0.00'}</span>
             </div>
             <div class="item">
-              <span class="item-label">PetPooja Bill No.:</span>
-              <span class="item-value">${order.petpooja_bill_number || 'Pending'}</span>
+              <span class="item-label">Pending:</span>
+              <span class="item-value">₹${order.pending_amount ? order.pending_amount.toFixed(2) : '0.00'}</span>
             </div>
-          </div>
-          
-          <div class="billing-note">
-            📋 Billing in PetPooja
           </div>
           
           <div class="footer">
@@ -795,6 +830,72 @@ const ManageOrders = () => {
     `);
     printWindow.document.close();
     printWindow.print();
+  };
+
+  const handleBulkPrintKOT = () => {
+    const ordersToPrint = orders.filter(o => selectedOrderIds.includes(o.id));
+    if (ordersToPrint.length === 0) return;
+    const printWindow = window.open('', '_blank');
+    let html = `<!DOCTYPE html><html><head><title>Bulk KOT Print</title>
+      <style>
+        body { font-family: Arial, sans-serif; padding: 0; margin: 0; }
+        .kot-page { max-width: 400px; margin: 0 auto; padding: 20px; page-break-after: always; }
+        .kot-page:last-child { page-break-after: auto; }
+        .header { text-align: center; border-bottom: 3px solid #000; padding-bottom: 10px; margin-bottom: 10px; }
+        .header h1 { margin: 0; font-size: 24px; }
+        .section { margin: 8px 0; padding: 8px; background: #f9f9f9; border-radius: 4px; }
+        .section-title { font-weight: bold; font-size: 13px; color: #e92587; margin-bottom: 6px; text-transform: uppercase; }
+        .item { margin: 4px 0; font-size: 12px; display: flex; justify-content: space-between; }
+        .item-label { font-weight: 600; }
+        .highlight { background: #fff3cd; padding: 8px; border-left: 4px solid #ffc107; margin: 10px 0; font-size: 12px; }
+        .footer { text-align: center; border-top: 2px solid #000; padding-top: 10px; margin-top: 15px; font-size: 11px; color: #666; }
+        @media print { body { max-width: 100%; } }
+      </style></head><body>`;
+    ordersToPrint.forEach(order => {
+      const outlet = outlets.find(o => o.id === order.outlet_id);
+      const outletName = outlet ? outlet.name : 'N/A';
+      html += `<div class="kot-page">
+        <div class="header"><h1>US BAKERS</h1><p style="margin:5px 0;font-size:14px;">Kitchen Order Ticket</p>
+        <strong>Order #${order.order_number}</strong> | ${new Date(order.created_at).toLocaleDateString('en-IN')}</div>
+        <div class="section"><div class="section-title">Order Info</div>
+        <div class="item"><span class="item-label">Outlet:</span><span>${outletName}</span></div>
+        <div class="item"><span class="item-label">Delivery:</span><span>${order.delivery_date} | ${order.delivery_time} | ${order.status.replace(/_/g, ' ').toUpperCase()}</span></div></div>
+        <div class="section"><div class="section-title">Customer</div>
+        <div class="item"><span class="item-label">Name:</span><span>${order.customer_info?.name || 'N/A'}</span></div>
+        <div class="item"><span class="item-label">Phone:</span><span>${order.customer_info?.phone || 'N/A'}</span></div>
+        <div class="item"><span class="item-label">Address:</span><span>${order.delivery_address || 'N/A'}</span></div></div>
+        <div class="section"><div class="section-title">Cake</div>
+        <div class="item"><span class="item-label">Occasion:</span><span>${order.occasion || 'N/A'}</span></div>
+        <div class="item"><span class="item-label">Flavour:</span><span>${order.flavour || 'N/A'}</span></div>
+        <div class="item"><span class="item-label">Size:</span><span>${order.size_pounds} Pounds</span></div>
+        <div class="item"><span class="item-label">Message:</span><span>${order.name_on_cake || 'None'}</span></div></div>
+        ${order.special_instructions ? `<div class="highlight"><strong>INSTRUCTIONS:</strong><ul style="margin:5px 0;padding-left:20px;">${order.special_instructions.split('\n').filter(l => l.trim()).map(l => `<li>${l.trim()}</li>`).join('')}</ul></div>` : ''}
+        <div class="section"><div class="section-title">Payment</div>
+        <div class="item"><span class="item-label">Total:</span><span>₹${order.total_amount?.toFixed(2)}</span></div>
+        <div class="item"><span class="item-label">Paid:</span><span>₹${order.paid_amount?.toFixed(2) || '0.00'}</span></div></div>
+        <div class="footer">Generated: ${new Date().toLocaleString('en-IN')}</div></div>`;
+    });
+    html += `</body></html>`;
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.print();
+    setSelectedOrderIds([]);
+  };
+
+  const toggleOrderSelection = (orderId) => {
+    setSelectedOrderIds(prev => 
+      prev.includes(orderId) ? prev.filter(id => id !== orderId) : [...prev, orderId]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    const currentPageOrders = filteredOrders.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+    const allSelected = currentPageOrders.every(o => selectedOrderIds.includes(o.id));
+    if (allSelected) {
+      setSelectedOrderIds(prev => prev.filter(id => !currentPageOrders.find(o => o.id === id)));
+    } else {
+      setSelectedOrderIds(prev => [...new Set([...prev, ...currentPageOrders.map(o => o.id)])]);
+    }
   };
 
   const getStatusBadge = (status) => {
@@ -955,19 +1056,25 @@ const ManageOrders = () => {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-8">
             <TabsTrigger value="all">All ({orders.length})</TabsTrigger>
             <TabsTrigger value="confirmed">
               Confirmed ({orders.filter(o => o.status === 'confirmed').length})
             </TabsTrigger>
+            <TabsTrigger value="in_progress">
+              Preparing ({orders.filter(o => o.status === 'in_progress').length})
+            </TabsTrigger>
             <TabsTrigger value="ready">
               Ready ({orders.filter(o => o.status === 'ready').length})
             </TabsTrigger>
+            <TabsTrigger value="ready_to_deliver">
+              To Deliver ({orders.filter(o => o.status === 'ready_to_deliver').length})
+            </TabsTrigger>
             <TabsTrigger value="picked_up">
-              Delivery ({orders.filter(o => o.status === 'picked_up').length})
+              Out ({orders.filter(o => o.status === 'picked_up').length})
             </TabsTrigger>
             <TabsTrigger value="delivered">
-              Delivered ({orders.filter(o => o.status === 'delivered').length})
+              Done ({orders.filter(o => o.status === 'delivered').length})
             </TabsTrigger>
             <TabsTrigger value="cancelled">
               Cancelled ({orders.filter(o => o.status === 'cancelled').length})
@@ -980,10 +1087,25 @@ const ManageOrders = () => {
                 <CardTitle>Orders ({filteredOrders.length})</CardTitle>
               </CardHeader>
               <CardContent>
+                {/* Bulk Actions Bar */}
+                {selectedOrderIds.length > 0 && (
+                  <div className="flex items-center gap-3 mb-3 p-2 bg-blue-50 rounded-lg border border-blue-200">
+                    <span className="text-sm font-medium text-blue-700">{selectedOrderIds.length} selected</span>
+                    <Button size="sm" variant="outline" onClick={handleBulkPrintKOT} data-testid="bulk-print-kot-btn">
+                      <Printer className="h-3 w-3 mr-1" /> Print KOT
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setSelectedOrderIds([])}>Clear</Button>
+                  </div>
+                )}
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-[40px]">
+                          <input type="checkbox" className="rounded" onChange={toggleSelectAll}
+                            checked={filteredOrders.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).length > 0 && 
+                              filteredOrders.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).every(o => selectedOrderIds.includes(o.id))} />
+                        </TableHead>
                         <TableHead>Order #</TableHead>
                         <TableHead>Customer</TableHead>
                         <TableHead>Cake Photo</TableHead>
@@ -997,7 +1119,7 @@ const ManageOrders = () => {
                     <TableBody>
                       {filteredOrders.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                          <TableCell colSpan={9} className="text-center py-8 text-gray-500">
                             No orders found
                           </TableCell>
                         </TableRow>
@@ -1007,8 +1129,14 @@ const ManageOrders = () => {
                           .map((order) => (
                           <TableRow 
                             key={order.id}
-                            className={order.status === 'delivered' ? 'bg-green-50 hover:bg-green-100' : ''}
+                            className={`${order.status === 'delivered' ? 'bg-green-50 hover:bg-green-100' : ''} ${order.status === 'in_progress' ? 'bg-orange-50' : ''} ${order.status === 'ready' ? 'bg-green-50' : ''}`}
                           >
+                            <TableCell>
+                              <input type="checkbox" className="rounded"
+                                checked={selectedOrderIds.includes(order.id)}
+                                onChange={() => toggleOrderSelection(order.id)}
+                              />
+                            </TableCell>
                             <TableCell className="font-medium">
                               <div className="flex items-center space-x-2">
                                 <Package className="h-4 w-4 text-gray-400" />
@@ -1108,6 +1236,19 @@ const ManageOrders = () => {
                                   </Button>
                                 )}
 
+                                {/* Assign Delivery Person Button */}
+                                {order.status === 'ready_to_deliver' && !order.assigned_delivery_partner && (
+                                  <Button
+                                    size="sm"
+                                    className="bg-purple-600 hover:bg-purple-700 text-white text-xs"
+                                    onClick={() => openAssignDialog(order.id)}
+                                    data-testid={`assign-delivery-btn-${order.id}`}
+                                  >
+                                    <Truck className="h-3 w-3 mr-1" />
+                                    Assign Delivery
+                                  </Button>
+                                )}
+
                                 {/* Status Dropdown */}
                                 <Select 
                                   value={order.status}
@@ -1118,7 +1259,7 @@ const ManageOrders = () => {
                                   </SelectTrigger>
                                   <SelectContent>
                                     <SelectItem value="confirmed">Confirmed</SelectItem>
-                                    <SelectItem value="preparing">Preparing</SelectItem>
+                                    <SelectItem value="in_progress">Preparing</SelectItem>
                                     <SelectItem value="ready">Ready</SelectItem>
                                     <SelectItem value="ready_to_deliver" disabled={!order.actual_cake_image_url}>
                                       Ready to Deliver {!order.actual_cake_image_url && '(Photo Required)'}
@@ -1422,6 +1563,8 @@ const ManageOrders = () => {
                 </Select>
               </div>
             </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Photo Upload Modal */}
         <Dialog open={photoUploadModalOpen} onOpenChange={setPhotoUploadModalOpen}>
@@ -1580,9 +1723,6 @@ const ManageOrders = () => {
           </DialogContent>
         </Dialog>
 
-          </DialogContent>
-        </Dialog>
-
         {/* Camera Capture Dialog for Ready to Deliver */}
         <Dialog open={cameraDialogOpen} onOpenChange={(open) => { if (!open) closeCameraDialog(); }}>
           <DialogContent className="max-w-lg">
@@ -1636,6 +1776,43 @@ const ManageOrders = () => {
                   </div>
                 </div>
               )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Assign Delivery Person Dialog */}
+        <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Assign Delivery Person</DialogTitle>
+              <DialogDescription>Select a delivery person for this order</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div>
+                <Label>Delivery Person</Label>
+                <Select value={selectedDeliveryPerson} onValueChange={setSelectedDeliveryPerson}>
+                  <SelectTrigger data-testid="delivery-person-select">
+                    <SelectValue placeholder="Select delivery person" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {deliveryPersons.map((dp) => (
+                      <SelectItem key={dp.id} value={dp.id}>{dp.name} ({dp.phone})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {deliveryPersons.length === 0 && (
+                  <p className="text-sm text-red-500 mt-1">No delivery persons found. Add them in User Management.</p>
+                )}
+              </div>
+              <Button 
+                onClick={handleAssignDelivery} 
+                className="w-full bg-purple-600 hover:bg-purple-700 text-white"
+                disabled={!selectedDeliveryPerson || assigning}
+                data-testid="confirm-assign-btn"
+              >
+                <Truck className="h-4 w-4 mr-2" />
+                {assigning ? 'Assigning...' : 'Assign & Dispatch'}
+              </Button>
             </div>
           </DialogContent>
         </Dialog>

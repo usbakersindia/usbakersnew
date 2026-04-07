@@ -1857,7 +1857,7 @@ async def update_order(
     
     # Allow specific fields to be updated
     allowed_fields = ['flavour', 'size_pounds', 'cake_image_url', 'delivery_date', 'delivery_time', 
-                     'name_on_cake', 'special_instructions', 'total_amount', 'secondary_images', 'customer_info']
+                     'name_on_cake', 'special_instructions', 'total_amount', 'secondary_images', 'customer_info', 'occasion']
     
     for field in allowed_fields:
         if field in update_data:
@@ -2220,6 +2220,46 @@ async def accept_delivery_order(
     )
     
     return {"message": "Order accepted for delivery"}
+
+@api_router.post("/delivery/assign-order/{order_id}")
+async def assign_delivery_order(
+    order_id: str,
+    delivery_person_id: str,
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.OUTLET_ADMIN, UserRole.ORDER_MANAGER]))
+):
+    """Counter/Manager assigns a delivery person to an order"""
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    if order.get('status') != 'ready_to_deliver':
+        raise HTTPException(status_code=400, detail="Order is not ready for delivery")
+    
+    # Verify delivery person exists and has delivery role
+    delivery_user = await db.users.find_one({"id": delivery_person_id, "role": "delivery", "is_active": True}, {"_id": 0})
+    if not delivery_user:
+        raise HTTPException(status_code=404, detail="Delivery person not found")
+    
+    await db.orders.update_one(
+        {"id": order_id},
+        {"$set": {
+            "assigned_delivery_partner": delivery_person_id,
+            "status": "picked_up",
+            "assigned_by": current_user.id,
+            "assigned_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    return {"message": f"Order assigned to {delivery_user.get('name')}"}
+
+@api_router.get("/delivery/persons")
+async def get_delivery_persons(
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.OUTLET_ADMIN, UserRole.ORDER_MANAGER]))
+):
+    """Get list of active delivery persons"""
+    persons = await db.users.find({"role": "delivery", "is_active": True}, {"_id": 0, "password_hash": 0}).to_list(100)
+    return persons
 
 @api_router.get("/delivery/my-orders")
 async def get_my_delivery_orders(

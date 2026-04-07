@@ -38,6 +38,12 @@ Comprehensive CRM and management system for a multi-outlet bakery chain named "U
 - **Camera capture popup** in ManageOrders for branch/counter staff
 - **Delivery Dashboard**: Mobile-optimized, real-time available orders, accept flow, Navigate + Delivered buttons
 - **Cake Image Report**: Redesigned with Order ID, Customer Name, Phone Number filters + side-by-side comparison layout with pagination
+- **Kitchen Dashboard v2**: Start Preparing flow, time slot grouping, ready orders in green at bottom, status badges (Waiting/Preparing/Ready)
+- **ManageOrders v2**: New tabs (Preparing, To Deliver), bulk KOT print with checkboxes, Assign Delivery Person dialog, in_progress status
+- **Delivery Assignment**: Counter/Manager assigns delivery person manually via dropdown (not self-accept)
+- **KOT Redesign**: Combined delivery status + date/time, removed PetPooja billing box, instructions as bullet list
+- **Edit Order fix**: Added `occasion` to allowed fields, fixed orphaned dialog tags
+- **Image capture fix**: Fixed duplicate setState in capturePhoto blob creation
 - Created seed script (`backend/seed_data.py`) with dummy data: 3 outlets, 9 zones, 5 users, 15 orders (today/tomorrow/+2/+3 days), 8 flavours, 5 occasions, 6 time slots, 2 sales persons
 - Added "Reset System" button in Settings (Danger Zone) with confirmation dialog — clears all data except super admin
 - Added `POST /api/system-reset` backend endpoint (replaced text input with hour/minute/AM-PM selectors)
