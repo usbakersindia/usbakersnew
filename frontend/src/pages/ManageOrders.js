@@ -625,205 +625,153 @@ const ManageOrders = () => {
   };
 
   const handlePrintKOT = (order) => {
-    // Get outlet name
     const outlet = outlets.find(o => o.id === order.outlet_id);
     const outletName = outlet ? outlet.name : 'N/A';
     
-    // Generate order URL for QR code
-    const orderUrl = `${window.location.origin}/orders/${order.id}`;
-    
-    // Open print window with complete KOT
     const printWindow = window.open('', '_blank');
+    const dashes = '--------------------------------';
+    const doubleDashes = '================================';
+    
+    const instructions = order.special_instructions 
+      ? order.special_instructions.split('\n').filter(l => l.trim()).map(l => `* ${l.trim()}`).join('\n')
+      : '';
+
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
         <head>
           <title>KOT - ${order.order_number}</title>
           <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
             body { 
-              font-family: 'Arial', sans-serif; 
-              padding: 20px; 
-              max-width: 400px; 
-              margin: 0 auto;
+              font-family: 'Courier New', 'Lucida Console', monospace;
+              font-size: 12px;
+              line-height: 1.4;
+              width: 80mm;
+              padding: 4mm;
+              color: #000;
             }
-            .header { 
-              text-align: center; 
-              border-bottom: 3px solid #000; 
-              padding-bottom: 15px; 
-              margin-bottom: 15px; 
+            .center { text-align: center; }
+            .bold { font-weight: bold; }
+            .divider { 
+              border: none;
+              border-top: 1px dashed #000;
+              margin: 4px 0;
             }
-            .header h1 { 
-              margin: 0; 
-              font-size: 28px; 
-              color: #e92587;
-              font-weight: bold;
+            .double-divider {
+              border: none;
+              border-top: 2px solid #000;
+              margin: 4px 0;
             }
-            .header h2 { 
-              margin: 5px 0; 
-              font-size: 16px; 
-              color: #666;
-            }
-            .section { 
-              margin: 12px 0; 
-              padding: 10px;
-              background: #f9f9f9;
-              border-radius: 5px;
-            }
-            .section-title { 
-              font-weight: bold; 
-              font-size: 14px; 
-              color: #e92587;
-              margin-bottom: 8px;
-              text-transform: uppercase;
-            }
-            .item { 
-              margin: 6px 0;
-              font-size: 13px;
+            .row {
               display: flex;
               justify-content: space-between;
+              margin: 2px 0;
             }
-            .item-label {
-              font-weight: 600;
-              color: #333;
-            }
-            .item-value {
-              color: #666;
-            }
-            .highlight {
-              background: #fff3cd;
-              padding: 10px;
-              border-left: 4px solid #ffc107;
-              margin: 15px 0;
-              font-size: 14px;
+            .row-label { font-weight: bold; }
+            .big { font-size: 16px; font-weight: bold; }
+            .instructions {
+              border: 1px solid #000;
+              padding: 4px;
+              margin: 4px 0;
+              white-space: pre-line;
               font-weight: bold;
             }
-            .footer { 
-              text-align: center; 
-              border-top: 3px solid #000; 
-              padding-top: 15px; 
-              margin-top: 20px; 
-            }
-            .qr-code { 
-              margin: 15px 0; 
-            }
-            .qr-code img {
-              border: 2px solid #e92587;
-              padding: 5px;
-              border-radius: 8px;
-            }
-            .billing-note {
-              background: #e8f5e9;
-              padding: 12px;
-              border-radius: 5px;
-              margin-top: 15px;
-              font-weight: bold;
-              color: #2e7d32;
-              border: 2px dashed #4caf50;
-            }
+            .footer { font-size: 10px; text-align: center; margin-top: 6px; }
             @media print {
-              body { max-width: 100%; }
+              @page { 
+                size: 80mm auto;
+                margin: 0;
+              }
+              body { width: 80mm; }
             }
           </style>
         </head>
         <body>
-          <div class="header">
-            <h1>US BAKERS</h1>
-            <h2>Kitchen Order Ticket (KOT)</h2>
-            <div style="margin-top: 10px;">
-              <strong>Order ID:</strong> ${order.order_number}<br/>
-              <strong>Date of Booking:</strong> ${new Date(order.created_at).toLocaleDateString('en-IN')}
-            </div>
-          </div>
+          <div class="center bold big">US BAKERS</div>
+          <div class="center" style="font-size:10px;">Kitchen Order Ticket</div>
+          <hr class="double-divider" />
           
-          <div class="section">
-            <div class="section-title">Order Information</div>
-            <div class="item">
-              <span class="item-label">Outlet Name:</span>
-              <span class="item-value">${outletName}</span>
-            </div>
-            <div class="item">
-              <span class="item-label">Taken By:</span>
-              <span class="item-value">${order.order_taken_by || 'N/A'}</span>
-            </div>
-            <div class="item">
-              <span class="item-label">Delivery:</span>
-              <span class="item-value">${order.delivery_date} | ${order.delivery_time} | ${order.status.replace(/_/g, ' ').toUpperCase()}</span>
-            </div>
+          <div class="row">
+            <span class="bold big">Order #${order.order_number}</span>
           </div>
+          <div class="row">
+            <span>Date:</span>
+            <span>${new Date(order.created_at).toLocaleDateString('en-IN')}</span>
+          </div>
+          <div class="row">
+            <span>Outlet:</span>
+            <span>${outletName}</span>
+          </div>
+          <hr class="divider" />
           
-          <div class="section">
-            <div class="section-title">Customer Details</div>
-            <div class="item">
-              <span class="item-label">Name:</span>
-              <span class="item-value">${order.customer_info?.name || 'N/A'}</span>
-            </div>
-            <div class="item">
-              <span class="item-label">Phone Number:</span>
-              <span class="item-value">${order.customer_info?.phone || 'N/A'}</span>
-            </div>
-            <div class="item">
-              <span class="item-label">Address:</span>
-              <span class="item-value">${order.customer_info?.address || order.delivery_address || 'N/A'}</span>
-            </div>
-            <div class="item">
-              <span class="item-label">Delivery Zone:</span>
-              <span class="item-value">${order.delivery_zone || 'N/A'}</span>
-            </div>
+          <div class="row">
+            <span>Delivery:</span>
+            <span>${order.delivery_date}</span>
           </div>
+          <div class="row">
+            <span>Time:</span>
+            <span>${order.delivery_time || 'N/A'}</span>
+          </div>
+          <div class="row">
+            <span>Status:</span>
+            <span class="bold">${order.status.replace(/_/g, ' ').toUpperCase()}</span>
+          </div>
+          <hr class="divider" />
           
-          <div class="section">
-            <div class="section-title">Cake Details</div>
-            <div class="item">
-              <span class="item-label">Occasion:</span>
-              <span class="item-value">${order.occasion || 'N/A'}</span>
-            </div>
-            <div class="item">
-              <span class="item-label">Flavour:</span>
-              <span class="item-value">${order.flavour || 'N/A'}</span>
-            </div>
-            <div class="item">
-              <span class="item-label">Size:</span>
-              <span class="item-value">${order.size_pounds} Pounds</span>
-            </div>
-            <div class="item">
-              <span class="item-label">Name on Cake:</span>
-              <span class="item-value">${order.name_on_cake || 'None'}</span>
-            </div>
+          <div class="bold" style="font-size:11px;">CUSTOMER</div>
+          <div class="row">
+            <span>${order.customer_info?.name || 'N/A'}</span>
           </div>
+          <div class="row">
+            <span>Ph: ${order.customer_info?.phone || 'N/A'}</span>
+          </div>
+          ${order.delivery_address ? `<div style="font-size:10px;">Addr: ${order.delivery_address}</div>` : ''}
+          <hr class="divider" />
           
-          ${order.special_instructions ? `
-          <div class="highlight">
-            <div style="color: #856404; margin-bottom: 5px;">SPECIAL INSTRUCTIONS:</div>
-            <ul style="margin: 0; padding-left: 20px;">
-              ${order.special_instructions.split('\n').filter(l => l.trim()).map(l => `<li>${l.trim()}</li>`).join('')}
-            </ul>
+          <div class="bold" style="font-size:11px;">CAKE DETAILS</div>
+          <div class="row">
+            <span>Flavour:</span>
+            <span class="bold">${order.flavour || 'N/A'}</span>
           </div>
+          <div class="row">
+            <span>Size:</span>
+            <span class="bold">${order.size_pounds} Pounds</span>
+          </div>
+          <div class="row">
+            <span>Occasion:</span>
+            <span>${order.occasion || 'N/A'}</span>
+          </div>
+          ${order.name_on_cake ? `
+          <div class="row">
+            <span>Message:</span>
+            <span class="bold">"${order.name_on_cake}"</span>
+          </div>` : ''}
+          
+          ${instructions ? `
+          <hr class="divider" />
+          <div class="instructions">INSTRUCTIONS:\n${instructions}</div>
           ` : ''}
           
-          <div class="section">
-            <div class="section-title">Payment Details</div>
-            <div class="item">
-              <span class="item-label">Total Amount:</span>
-              <span class="item-value">₹${order.total_amount.toFixed(2)}</span>
-            </div>
-            <div class="item">
-              <span class="item-label">Paid Amount:</span>
-              <span class="item-value">₹${order.paid_amount ? order.paid_amount.toFixed(2) : '0.00'}</span>
-            </div>
-            <div class="item">
-              <span class="item-label">Pending:</span>
-              <span class="item-value">₹${order.pending_amount ? order.pending_amount.toFixed(2) : '0.00'}</span>
-            </div>
+          <hr class="divider" />
+          <div class="bold" style="font-size:11px;">PAYMENT</div>
+          <div class="row">
+            <span>Total:</span>
+            <span class="bold">Rs.${order.total_amount?.toFixed(2)}</span>
+          </div>
+          <div class="row">
+            <span>Paid:</span>
+            <span>Rs.${order.paid_amount ? order.paid_amount.toFixed(2) : '0.00'}</span>
+          </div>
+          <div class="row">
+            <span>Pending:</span>
+            <span class="bold">Rs.${order.pending_amount ? order.pending_amount.toFixed(2) : '0.00'}</span>
           </div>
           
+          <hr class="double-divider" />
           <div class="footer">
-            <div class="qr-code">
-              <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(orderUrl)}" alt="Order QR Code" />
-              <div style="font-size: 11px; color: #666; margin-top: 5px;">Scan for order details</div>
-            </div>
-            <div style="font-size: 12px; color: #666; margin-top: 10px;">
-              Generated: ${new Date().toLocaleString('en-IN')}
-            </div>
+            ${new Date().toLocaleString('en-IN')}<br/>
+            Thank You!
           </div>
         </body>
       </html>
@@ -836,44 +784,59 @@ const ManageOrders = () => {
     const ordersToPrint = orders.filter(o => selectedOrderIds.includes(o.id));
     if (ordersToPrint.length === 0) return;
     const printWindow = window.open('', '_blank');
-    let html = `<!DOCTYPE html><html><head><title>Bulk KOT Print</title>
+    let html = `<!DOCTYPE html><html><head><title>Bulk KOT</title>
       <style>
-        body { font-family: Arial, sans-serif; padding: 0; margin: 0; }
-        .kot-page { max-width: 400px; margin: 0 auto; padding: 20px; page-break-after: always; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Courier New', 'Lucida Console', monospace; font-size: 12px; line-height: 1.4; color: #000; }
+        .kot-page { width: 80mm; padding: 4mm; page-break-after: always; }
         .kot-page:last-child { page-break-after: auto; }
-        .header { text-align: center; border-bottom: 3px solid #000; padding-bottom: 10px; margin-bottom: 10px; }
-        .header h1 { margin: 0; font-size: 24px; }
-        .section { margin: 8px 0; padding: 8px; background: #f9f9f9; border-radius: 4px; }
-        .section-title { font-weight: bold; font-size: 13px; color: #e92587; margin-bottom: 6px; text-transform: uppercase; }
-        .item { margin: 4px 0; font-size: 12px; display: flex; justify-content: space-between; }
-        .item-label { font-weight: 600; }
-        .highlight { background: #fff3cd; padding: 8px; border-left: 4px solid #ffc107; margin: 10px 0; font-size: 12px; }
-        .footer { text-align: center; border-top: 2px solid #000; padding-top: 10px; margin-top: 15px; font-size: 11px; color: #666; }
-        @media print { body { max-width: 100%; } }
+        .center { text-align: center; }
+        .bold { font-weight: bold; }
+        .big { font-size: 16px; font-weight: bold; }
+        .divider { border: none; border-top: 1px dashed #000; margin: 4px 0; }
+        .double-divider { border: none; border-top: 2px solid #000; margin: 4px 0; }
+        .row { display: flex; justify-content: space-between; margin: 2px 0; }
+        .instructions { border: 1px solid #000; padding: 4px; margin: 4px 0; white-space: pre-line; font-weight: bold; }
+        .footer { font-size: 10px; text-align: center; margin-top: 6px; }
+        @media print { @page { size: 80mm auto; margin: 0; } }
       </style></head><body>`;
     ordersToPrint.forEach(order => {
       const outlet = outlets.find(o => o.id === order.outlet_id);
       const outletName = outlet ? outlet.name : 'N/A';
+      const instructions = order.special_instructions 
+        ? order.special_instructions.split('\n').filter(l => l.trim()).map(l => `* ${l.trim()}`).join('\n')
+        : '';
       html += `<div class="kot-page">
-        <div class="header"><h1>US BAKERS</h1><p style="margin:5px 0;font-size:14px;">Kitchen Order Ticket</p>
-        <strong>Order #${order.order_number}</strong> | ${new Date(order.created_at).toLocaleDateString('en-IN')}</div>
-        <div class="section"><div class="section-title">Order Info</div>
-        <div class="item"><span class="item-label">Outlet:</span><span>${outletName}</span></div>
-        <div class="item"><span class="item-label">Delivery:</span><span>${order.delivery_date} | ${order.delivery_time} | ${order.status.replace(/_/g, ' ').toUpperCase()}</span></div></div>
-        <div class="section"><div class="section-title">Customer</div>
-        <div class="item"><span class="item-label">Name:</span><span>${order.customer_info?.name || 'N/A'}</span></div>
-        <div class="item"><span class="item-label">Phone:</span><span>${order.customer_info?.phone || 'N/A'}</span></div>
-        <div class="item"><span class="item-label">Address:</span><span>${order.delivery_address || 'N/A'}</span></div></div>
-        <div class="section"><div class="section-title">Cake</div>
-        <div class="item"><span class="item-label">Occasion:</span><span>${order.occasion || 'N/A'}</span></div>
-        <div class="item"><span class="item-label">Flavour:</span><span>${order.flavour || 'N/A'}</span></div>
-        <div class="item"><span class="item-label">Size:</span><span>${order.size_pounds} Pounds</span></div>
-        <div class="item"><span class="item-label">Message:</span><span>${order.name_on_cake || 'None'}</span></div></div>
-        ${order.special_instructions ? `<div class="highlight"><strong>INSTRUCTIONS:</strong><ul style="margin:5px 0;padding-left:20px;">${order.special_instructions.split('\n').filter(l => l.trim()).map(l => `<li>${l.trim()}</li>`).join('')}</ul></div>` : ''}
-        <div class="section"><div class="section-title">Payment</div>
-        <div class="item"><span class="item-label">Total:</span><span>₹${order.total_amount?.toFixed(2)}</span></div>
-        <div class="item"><span class="item-label">Paid:</span><span>₹${order.paid_amount?.toFixed(2) || '0.00'}</span></div></div>
-        <div class="footer">Generated: ${new Date().toLocaleString('en-IN')}</div></div>`;
+        <div class="center bold big">US BAKERS</div>
+        <div class="center" style="font-size:10px;">Kitchen Order Ticket</div>
+        <hr class="double-divider" />
+        <div class="row"><span class="bold big">Order #${order.order_number}</span></div>
+        <div class="row"><span>Date:</span><span>${new Date(order.created_at).toLocaleDateString('en-IN')}</span></div>
+        <div class="row"><span>Outlet:</span><span>${outletName}</span></div>
+        <hr class="divider" />
+        <div class="row"><span>Delivery:</span><span>${order.delivery_date}</span></div>
+        <div class="row"><span>Time:</span><span>${order.delivery_time || 'N/A'}</span></div>
+        <div class="row"><span>Status:</span><span class="bold">${order.status.replace(/_/g, ' ').toUpperCase()}</span></div>
+        <hr class="divider" />
+        <div class="bold" style="font-size:11px;">CUSTOMER</div>
+        <div>${order.customer_info?.name || 'N/A'}</div>
+        <div>Ph: ${order.customer_info?.phone || 'N/A'}</div>
+        ${order.delivery_address ? `<div style="font-size:10px;">Addr: ${order.delivery_address}</div>` : ''}
+        <hr class="divider" />
+        <div class="bold" style="font-size:11px;">CAKE DETAILS</div>
+        <div class="row"><span>Flavour:</span><span class="bold">${order.flavour || 'N/A'}</span></div>
+        <div class="row"><span>Size:</span><span class="bold">${order.size_pounds} Pounds</span></div>
+        <div class="row"><span>Occasion:</span><span>${order.occasion || 'N/A'}</span></div>
+        ${order.name_on_cake ? `<div class="row"><span>Message:</span><span class="bold">"${order.name_on_cake}"</span></div>` : ''}
+        ${instructions ? `<hr class="divider" /><div class="instructions">INSTRUCTIONS:\n${instructions}</div>` : ''}
+        <hr class="divider" />
+        <div class="bold" style="font-size:11px;">PAYMENT</div>
+        <div class="row"><span>Total:</span><span class="bold">Rs.${order.total_amount?.toFixed(2)}</span></div>
+        <div class="row"><span>Paid:</span><span>Rs.${order.paid_amount?.toFixed(2) || '0.00'}</span></div>
+        <div class="row"><span>Pending:</span><span class="bold">Rs.${order.pending_amount?.toFixed(2) || '0.00'}</span></div>
+        <hr class="double-divider" />
+        <div class="footer">${new Date().toLocaleString('en-IN')}<br/>Thank You!</div>
+      </div>`;
     });
     html += `</body></html>`;
     printWindow.document.write(html);
