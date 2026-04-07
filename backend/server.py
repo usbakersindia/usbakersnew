@@ -1858,6 +1858,42 @@ async def get_manage_orders(
     
     orders = await db.orders.find(query, {"_id": 0}).to_list(1000)
     
+    # Enrich orders with PetPooja bill numbers from petpooja_bills and payments collections
+    order_ids = [o['id'] for o in orders]
+    if order_ids:
+        petpooja_bills = await db.petpooja_bills.find(
+            {"order_id": {"$in": order_ids}},
+            {"_id": 0, "order_id": 1, "bill_number": 1}
+        ).to_list(5000)
+        
+        bill_lookup = {}
+        for bill in petpooja_bills:
+            oid = bill.get('order_id')
+            if oid not in bill_lookup:
+                bill_lookup[oid] = []
+            bn = bill.get('bill_number')
+            if bn and bn not in bill_lookup[oid]:
+                bill_lookup[oid].append(bn)
+        
+        payments_with_bills = await db.payments.find(
+            {"order_id": {"$in": order_ids}, "petpooja_bill_number": {"$ne": None}},
+            {"_id": 0, "order_id": 1, "petpooja_bill_number": 1}
+        ).to_list(5000)
+        
+        for pay in payments_with_bills:
+            oid = pay.get('order_id')
+            bn = pay.get('petpooja_bill_number')
+            if oid not in bill_lookup:
+                bill_lookup[oid] = []
+            if bn and bn not in bill_lookup[oid]:
+                bill_lookup[oid].append(bn)
+        
+        for order in orders:
+            existing_bills = order.get('petpooja_bill_numbers', [])
+            extra_bills = bill_lookup.get(order['id'], [])
+            all_bills = list(set(existing_bills + extra_bills))
+            order['petpooja_bill_numbers'] = all_bills
+    
     for order in orders:
         if isinstance(order.get('created_at'), str):
             order['created_at'] = datetime.fromisoformat(order['created_at'])

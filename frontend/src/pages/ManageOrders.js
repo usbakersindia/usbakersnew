@@ -743,6 +743,10 @@ const ManageOrders = () => {
             <span>${order.delivery_time || 'N/A'}</span>
           </div>
           <div class="row">
+            <span>Delivery Status:</span>
+            <span class="bold">${order.needs_delivery ? 'YES' : 'NO (Pickup)'}</span>
+          </div>
+          <div class="row">
             <span>Status:</span>
             <span class="bold">${order.status.replace(/_/g, ' ').toUpperCase()}</span>
           </div>
@@ -771,11 +775,10 @@ const ManageOrders = () => {
             <span>Occasion:</span>
             <span>${order.occasion || 'N/A'}</span>
           </div>
-          ${order.name_on_cake ? `
           <div class="row">
-            <span>Message:</span>
-            <span class="bold">"${order.name_on_cake}"</span>
-          </div>` : ''}
+            <span>Name on Cake:</span>
+            <span class="bold">${order.name_on_cake ? '"' + order.name_on_cake + '"' : 'N/A'}</span>
+          </div>
           
           ${instructions ? `
           <hr class="divider" />
@@ -857,6 +860,7 @@ const ManageOrders = () => {
         <hr class="divider" />
         <div class="row"><span>Delivery:</span><span>${order.delivery_date}</span></div>
         <div class="row"><span>Time:</span><span>${order.delivery_time || 'N/A'}</span></div>
+        <div class="row"><span>Delivery Status:</span><span class="bold">${order.needs_delivery ? 'YES' : 'NO (Pickup)'}</span></div>
         <div class="row"><span>Status:</span><span class="bold">${order.status.replace(/_/g, ' ').toUpperCase()}</span></div>
         <hr class="divider" />
         <div class="bold" style="font-size:11px;">CUSTOMER</div>
@@ -868,7 +872,7 @@ const ManageOrders = () => {
         <div class="row"><span>Flavour:</span><span class="bold">${order.flavour || 'N/A'}</span></div>
         <div class="row"><span>Size:</span><span class="bold">${order.size_pounds} Pounds</span></div>
         <div class="row"><span>Occasion:</span><span>${order.occasion || 'N/A'}</span></div>
-        ${order.name_on_cake ? `<div class="row"><span>Message:</span><span class="bold">"${order.name_on_cake}"</span></div>` : ''}
+        <div class="row"><span>Name on Cake:</span><span class="bold">${order.name_on_cake ? '"' + order.name_on_cake + '"' : 'N/A'}</span></div>
         ${instructions ? `<hr class="divider" /><div class="instructions">INSTRUCTIONS:\n${instructions}</div>` : ''}
         <hr class="divider" />
         <div class="bold" style="font-size:11px;">PAYMENT</div>

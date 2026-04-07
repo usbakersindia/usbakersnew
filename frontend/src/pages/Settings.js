@@ -257,15 +257,17 @@ const Settings = () => {
     const token = localStorage.getItem('token');
     setResetting(true);
     try {
-      await axios.post(`${API}/system-reset`, {}, {
+      const res = await axios.post(`${API}/system-reset`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setResetDialogOpen(false);
       setResetConfirmText('');
-      fetchAllSettings();
-      showSuccess('System reset successful. All data cleared except super admin.');
+      showSuccess('System reset successful! All data cleared except super admin. Reloading...');
+      // Reload page after short delay to refresh all data
+      setTimeout(() => window.location.reload(), 1500);
     } catch (err) {
-      showError(err.response?.data?.detail || 'Failed to reset system');
+      console.error('Reset error:', err);
+      showError(err.response?.data?.detail || 'Failed to reset system. Check console for details.');
     } finally {
       setResetting(false);
     }
