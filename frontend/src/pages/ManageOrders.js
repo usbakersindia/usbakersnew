@@ -797,6 +797,18 @@ const ManageOrders = () => {
             <span class="bold">Rs.${order.pending_amount ? order.pending_amount.toFixed(2) : '0.00'}</span>
           </div>
           
+          ${order.petpooja_bill_numbers && order.petpooja_bill_numbers.length > 0 ? `
+          <hr class="divider" />
+          <div class="bold" style="font-size:11px;">PETPOOJA BILLING</div>
+          <div class="row">
+            <span>Bill No:</span>
+            <span class="bold">${order.petpooja_bill_numbers.join(', ')}</span>
+          </div>
+          <div class="center bold" style="margin-top:4px; font-size:11px; border:1px solid #000; padding:3px;">
+            BILLING DONE IN PETPOOJA
+          </div>
+          ` : ''}
+          
           <hr class="double-divider" />
           <div class="footer">
             ${new Date().toLocaleString('en-IN')}<br/>
@@ -863,6 +875,12 @@ const ManageOrders = () => {
         <div class="row"><span>Total:</span><span class="bold">Rs.${order.total_amount?.toFixed(2)}</span></div>
         <div class="row"><span>Paid:</span><span>Rs.${order.paid_amount?.toFixed(2) || '0.00'}</span></div>
         <div class="row"><span>Pending:</span><span class="bold">Rs.${order.pending_amount?.toFixed(2) || '0.00'}</span></div>
+        ${order.petpooja_bill_numbers && order.petpooja_bill_numbers.length > 0 ? `
+        <hr class="divider" />
+        <div class="bold" style="font-size:11px;">PETPOOJA BILLING</div>
+        <div class="row"><span>Bill No:</span><span class="bold">${order.petpooja_bill_numbers.join(', ')}</span></div>
+        <div class="center bold" style="margin-top:4px; font-size:11px; border:1px solid #000; padding:3px;">BILLING DONE IN PETPOOJA</div>
+        ` : ''}
         <hr class="double-divider" />
         <div class="footer">${new Date().toLocaleString('en-IN')}<br/>Thank You!</div>
       </div>`;
