@@ -65,6 +65,7 @@ class OrderStatus(str, Enum):
     PENDING = "pending"  # Punch order, waiting for 20% payment
     ON_HOLD = "on_hold"  # Hold order, incomplete info
     CONFIRMED = "confirmed"  # Active order in manage orders
+    IN_PROGRESS = "in_progress"  # Kitchen is preparing the order
     READY = "ready"
     READY_TO_DELIVER = "ready_to_deliver"  # Photo uploaded, ready for delivery person
     PICKED_UP = "picked_up"
@@ -2274,26 +2275,55 @@ async def get_my_delivery_orders(
     orders = await db.orders.find(query, {"_id": 0}).sort("updated_at", -1).to_list(100)
     return orders
 
+class StatusUpdateRequest(BaseModel):
+    """Request body for status update - supports both body and query param"""
+    status: Optional[str] = None
+    is_ready: Optional[bool] = None
+    transfer_to_outlet_id: Optional[str] = None
+
 @api_router.patch("/orders/{order_id}/status")
 async def update_order_status(
     order_id: str,
-    status: OrderStatus,
+    status: Optional[OrderStatus] = None,
+    body: Optional[StatusUpdateRequest] = None,
     current_user: User = Depends(get_current_user)
 ):
-    """Update order status and send WhatsApp notification"""
+    """Update order status and send WhatsApp notification.
+    Accepts status from query parameter OR request body for flexibility."""
     order = await db.orders.find_one({"id": order_id}, {"_id": 0})
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     
+    # Get status from body if not provided as query param
+    actual_status = status
+    if actual_status is None and body and body.status:
+        try:
+            actual_status = OrderStatus(body.status)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid status: {body.status}")
+    
+    if actual_status is None:
+        raise HTTPException(status_code=400, detail="Status is required")
+    
     update_data = {
-        "status": status.value,
+        "status": actual_status.value,
         "updated_at": datetime.now(timezone.utc).isoformat()
     }
     
     # If marking as ready
-    if status == OrderStatus.READY:
+    if actual_status == OrderStatus.READY:
         update_data['is_ready'] = True
         update_data['ready_at'] = datetime.now(timezone.utc).isoformat()
+    
+    # Handle is_ready from body
+    if body and body.is_ready is not None:
+        update_data['is_ready'] = body.is_ready
+        if body.is_ready:
+            update_data['ready_at'] = datetime.now(timezone.utc).isoformat()
+    
+    # Handle transfer_to_outlet_id from body
+    if body and body.transfer_to_outlet_id:
+        update_data['transfer_to_outlet_id'] = body.transfer_to_outlet_id
     
     await db.orders.update_one({"id": order_id}, {"$set": update_data})
     
@@ -2303,7 +2333,7 @@ async def update_order_status(
         action="status_changed",
         performed_by=current_user.id,
         before_data={"status": order.get('status')},
-        after_data={"status": status.value}
+        after_data={"status": actual_status.value}
     )
     log_doc = log.model_dump()
     log_doc['timestamp'] = log_doc['timestamp'].isoformat()
@@ -2318,13 +2348,13 @@ async def update_order_status(
             OrderStatus.DELIVERED: WhatsAppTemplateEvent.DELIVERED
         }
         
-        if status in event_map:
+        if actual_status in event_map:
             # Send via MSG91 only
-            await send_msg91_whatsapp(order_id, event_map[status])
+            await send_msg91_whatsapp(order_id, event_map[actual_status])
     except Exception as e:
         logger.error(f"WhatsApp notification failed for order {order_id}: {str(e)}")
     
-    return {"message": f"Order status updated to {status.value}"}
+    return {"message": f"Order status updated to {actual_status.value}"}
 
 @api_router.post("/orders/{order_id}/transfer")
 async def transfer_order(
@@ -2441,9 +2471,9 @@ async def get_kitchen_orders(
     """Get orders for factory/kitchen with advanced filters"""
     query = {}
     
-    # Default: Show only confirmed and ready orders
+    # Default: Show confirmed, in_progress, and ready orders
     if not status:
-        query['status'] = {"$in": [OrderStatus.CONFIRMED.value, OrderStatus.READY.value]}
+        query['status'] = {"$in": [OrderStatus.CONFIRMED.value, OrderStatus.IN_PROGRESS.value, OrderStatus.READY.value, OrderStatus.READY_TO_DELIVER.value]}
     else:
         query['status'] = status
     
@@ -3594,6 +3624,9 @@ async def record_payment(
     
     if moved_to_manage:
         update_data['is_hold'] = False
+        # Update lifecycle_status and status to move order to manage orders
+        update_data['lifecycle_status'] = 'active'
+        update_data['status'] = OrderStatus.CONFIRMED.value
     
     await db.orders.update_one({"id": payment_data.order_id}, {"$set": update_data})
     
