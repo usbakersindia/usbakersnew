@@ -3184,16 +3184,41 @@ async def handle_petpooja_standard_format(request_data: Dict[str, Any]):
             payment_doc['paid_at'] = payment_doc['paid_at'].isoformat()
             await db.payments.insert_one(payment_doc)
             
-            # Update order
+            # Update order with threshold check
             new_paid_amount = order.get('paid_amount', 0) + total_amount
+            
+            # Get branch-specific threshold first, then fall back to global
+            outlet_id = order.get('outlet_id')
+            min_percentage = 20.0
+            if outlet_id:
+                branch_threshold = await db.branch_payment_thresholds.find_one({"outlet_id": outlet_id}, {"_id": 0})
+                if branch_threshold:
+                    min_percentage = branch_threshold.get('minimum_payment_percentage', 20.0)
+                else:
+                    sys_settings = await db.system_settings.find_one({"id": "system_settings"}, {"_id": 0})
+                    if sys_settings:
+                        min_percentage = sys_settings.get('minimum_payment_percentage', 20.0)
+            
+            payment_percentage = (new_paid_amount / order['total_amount'] * 100) if order['total_amount'] > 0 else 0
+            
+            current_lifecycle = order.get('lifecycle_status', 'pending_payment')
+            new_lifecycle = current_lifecycle
+            new_status = order.get('status', 'pending')
+            
+            if current_lifecycle == 'pending_payment' and payment_percentage >= min_percentage:
+                new_lifecycle = 'active'
+                new_status = OrderStatus.CONFIRMED.value
+                logger.info(f"Order {order['id']} moved to active (payment: {payment_percentage:.1f}% >= {min_percentage}%)")
+            elif current_lifecycle == 'pending_payment':
+                logger.info(f"Order {order['id']} still pending (payment: {payment_percentage:.1f}% < {min_percentage}%)")
             
             await db.orders.update_one(
                 {"id": order['id']},
                 {"$set": {
                     "paid_amount": new_paid_amount,
                     "pending_amount": order['total_amount'] - new_paid_amount,
-                    "lifecycle_status": "active",
-                    "status": OrderStatus.CONFIRMED,
+                    "lifecycle_status": new_lifecycle,
+                    "status": new_status,
                     "updated_at": datetime.now(timezone.utc).isoformat()
                 }}
             )
@@ -3305,9 +3330,19 @@ async def handle_petpooja_payment(request_data: Dict[str, Any]):
         if bill_number and bill_number not in bill_numbers:
             bill_numbers.append(bill_number)
         
-        # Get minimum payment threshold from settings
-        settings = await db.system_settings.find_one({"id": "system_settings"}, {"_id": 0})
-        min_percentage = settings.get('minimum_payment_percentage', 20.0) if settings else 20.0
+        # Get minimum payment threshold - check branch-specific first, then global
+        outlet_id = order.get('outlet_id')
+        min_percentage = 20.0
+        if outlet_id:
+            branch_threshold = await db.branch_payment_thresholds.find_one({"outlet_id": outlet_id}, {"_id": 0})
+            if branch_threshold:
+                min_percentage = branch_threshold.get('minimum_payment_percentage', 20.0)
+            else:
+                settings = await db.system_settings.find_one({"id": "system_settings"}, {"_id": 0})
+                min_percentage = settings.get('minimum_payment_percentage', 20.0) if settings else 20.0
+        else:
+            settings = await db.system_settings.find_one({"id": "system_settings"}, {"_id": 0})
+            min_percentage = settings.get('minimum_payment_percentage', 20.0) if settings else 20.0
         
         # Calculate payment percentage
         total_amount = order.get('total_amount', 0)
@@ -3375,7 +3410,8 @@ async def handle_petpooja_payment(request_data: Dict[str, Any]):
             "order_id": order['id'],
             "order_number": order.get('order_number'),
             "amount": amount,
-            "status": "confirmed"
+            "status": new_status,
+            "moved_to_manage": new_status == 'confirmed'
         }
     except Exception as e:
         logger.error(f"PetPooja payment handler error: {str(e)}")
