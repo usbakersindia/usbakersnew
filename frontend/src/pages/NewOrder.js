@@ -794,23 +794,15 @@ const NewOrder = () => {
                   />
                 </div>
                 <div>
-                  <Label>Delivery Time Slot *</Label>
-                  <Select
+                  <Label>Delivery Time *</Label>
+                  <Input
+                    type="time"
                     required
                     value={formData.delivery_time}
-                    onValueChange={(value) => setFormData({ ...formData, delivery_time: value })}
-                  >
-                    <SelectTrigger data-testid="delivery-time-select">
-                      <SelectValue placeholder="Select time slot" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {timeSlots.map((slot) => (
-                        <SelectItem key={slot.id} value={slot.time_slot}>
-                          {slot.time_slot}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    onChange={(e) => setFormData({ ...formData, delivery_time: e.target.value })}
+                    data-testid="delivery-time-input"
+                    className="w-full"
+                  />
                 </div>
               </div>
             </CardContent>
