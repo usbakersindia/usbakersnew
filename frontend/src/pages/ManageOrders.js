@@ -111,9 +111,11 @@ const ManageOrders = () => {
   // Camera capture for Ready to Deliver
   const [cameraDialogOpen, setCameraDialogOpen] = useState(false);
   const [cameraOrderId, setCameraOrderId] = useState(null);
+  const [cameraOrder, setCameraOrder] = useState(null);
   const [capturedPhoto, setCapturedPhoto] = useState(null);
   const [cameraStream, setCameraStream] = useState(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [deliveryChoiceStep, setDeliveryChoiceStep] = useState(false);
   
   // Delivery assignment
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
@@ -426,8 +428,11 @@ const ManageOrders = () => {
 
   // ==================== CAMERA CAPTURE FOR READY TO DELIVER ====================
   const openCameraForDelivery = async (orderId) => {
+    const order = orders.find(o => o.id === orderId);
     setCameraOrderId(orderId);
+    setCameraOrder(order);
     setCapturedPhoto(null);
+    setDeliveryChoiceStep(false);
     setCameraDialogOpen(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -486,10 +491,12 @@ const ManageOrders = () => {
     stopCamera();
     setCameraDialogOpen(false);
     setCameraOrderId(null);
+    setCameraOrder(null);
     setCapturedPhoto(null);
+    setDeliveryChoiceStep(false);
   };
 
-  const uploadCapturedAndMarkDelivery = async () => {
+  const uploadCapturedAndMarkDelivery = async (isPickup = false) => {
     if (!capturedPhoto?.blob || !cameraOrderId) return;
     setUploadingPhoto(true);
     try {
@@ -504,8 +511,23 @@ const ManageOrders = () => {
         {},
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
+      
+      // If customer pickup, mark order as pickup (removes from delivery dashboard)
+      if (isPickup) {
+        await axios.post(
+          `${API_URL}/api/orders/${cameraOrderId}/set-pickup?pickup=true`,
+          {},
+          { headers: { 'Authorization': `Bearer ${token}` } }
+        );
+      }
+      
       closeCameraDialog();
-      setMessage({ type: 'success', text: 'Order marked as Ready to Deliver! Incentive calculated.' });
+      setMessage({ 
+        type: 'success', 
+        text: isPickup 
+          ? 'Photo uploaded! Order marked for Customer Pickup. Incentive calculated.' 
+          : 'Order marked as Ready to Deliver! Incentive calculated.' 
+      });
       fetchOrders();
       setTimeout(() => setMessage({ type: '', text: '' }), 5000);
     } catch (error) {
@@ -1690,51 +1712,111 @@ const ManageOrders = () => {
         <Dialog open={cameraDialogOpen} onOpenChange={(open) => { if (!open) closeCameraDialog(); }}>
           <DialogContent className="max-w-lg">
             <DialogHeader>
-              <DialogTitle>Capture Cake Photo</DialogTitle>
-              <DialogDescription>Take a photo of the ready cake to mark this order as ready for delivery</DialogDescription>
+              <DialogTitle>
+                {deliveryChoiceStep ? 'Deliver or Customer Pickup?' : 'Capture Cake Photo'}
+              </DialogTitle>
+              <DialogDescription>
+                {deliveryChoiceStep 
+                  ? 'Photo captured! How should this order be fulfilled?' 
+                  : 'Take a photo of the ready cake to mark this order as ready for delivery'}
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
-              {!capturedPhoto ? (
-                <div className="relative">
-                  <video 
-                    id="camera-preview" 
-                    autoPlay 
-                    playsInline 
-                    muted
-                    className="w-full rounded-lg bg-black aspect-video"
-                  />
-                  <Button 
-                    onClick={capturePhoto} 
-                    className="w-full mt-3 bg-pink-600 hover:bg-pink-700 text-white"
-                    data-testid="capture-photo-btn"
-                  >
-                    <ImageIcon className="h-4 w-4 mr-2" />
-                    Capture Photo
-                  </Button>
-                </div>
-              ) : (
+              {/* Step 1: Camera / Photo Capture */}
+              {!deliveryChoiceStep && (
+                <>
+                  {!capturedPhoto ? (
+                    <div className="relative">
+                      <video 
+                        id="camera-preview" 
+                        autoPlay 
+                        playsInline 
+                        muted
+                        className="w-full rounded-lg bg-black aspect-video"
+                      />
+                      <Button 
+                        onClick={capturePhoto} 
+                        className="w-full mt-3 bg-pink-600 hover:bg-pink-700 text-white"
+                        data-testid="capture-photo-btn"
+                      >
+                        <ImageIcon className="h-4 w-4 mr-2" />
+                        Capture Photo
+                      </Button>
+                    </div>
+                  ) : (
+                    <div>
+                      <img 
+                        src={capturedPhoto.url} 
+                        alt="Captured cake" 
+                        className="w-full rounded-lg"
+                      />
+                      <div className="flex gap-2 mt-3">
+                        <Button 
+                          variant="outline" 
+                          className="flex-1" 
+                          onClick={retakePhoto}
+                          data-testid="retake-photo-btn"
+                        >
+                          Retake
+                        </Button>
+                        {cameraOrder?.needs_delivery ? (
+                          <Button 
+                            className="flex-1 bg-cyan-600 hover:bg-cyan-700 text-white" 
+                            onClick={() => setDeliveryChoiceStep(true)}
+                            data-testid="proceed-delivery-choice-btn"
+                          >
+                            Next: Deliver or Pickup?
+                          </Button>
+                        ) : (
+                          <Button 
+                            className="flex-1 bg-cyan-600 hover:bg-cyan-700 text-white" 
+                            onClick={() => uploadCapturedAndMarkDelivery(false)}
+                            disabled={uploadingPhoto}
+                            data-testid="confirm-ready-deliver-btn"
+                          >
+                            {uploadingPhoto ? 'Uploading...' : 'Confirm & Mark Ready'}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Step 2: Deliver vs Pickup Choice */}
+              {deliveryChoiceStep && capturedPhoto && (
                 <div>
                   <img 
                     src={capturedPhoto.url} 
                     alt="Captured cake" 
-                    className="w-full rounded-lg"
+                    className="w-full rounded-lg mb-4 max-h-48 object-cover"
                   />
-                  <div className="flex gap-2 mt-3">
+                  <div className="grid grid-cols-1 gap-3">
                     <Button 
-                      variant="outline" 
-                      className="flex-1" 
-                      onClick={retakePhoto}
-                      data-testid="retake-photo-btn"
+                      className="w-full bg-cyan-600 hover:bg-cyan-700 text-white py-6 text-base"
+                      onClick={() => uploadCapturedAndMarkDelivery(false)}
+                      disabled={uploadingPhoto}
+                      data-testid="choice-deliver-btn"
                     >
-                      Retake
+                      <Truck className="h-5 w-5 mr-2" />
+                      {uploadingPhoto ? 'Processing...' : 'Send for Delivery'}
                     </Button>
                     <Button 
-                      className="flex-1 bg-cyan-600 hover:bg-cyan-700 text-white" 
-                      onClick={uploadCapturedAndMarkDelivery}
+                      className="w-full bg-green-600 hover:bg-green-700 text-white py-6 text-base"
+                      onClick={() => uploadCapturedAndMarkDelivery(true)}
                       disabled={uploadingPhoto}
-                      data-testid="confirm-ready-deliver-btn"
+                      data-testid="choice-pickup-btn"
                     >
-                      {uploadingPhoto ? 'Uploading...' : 'Confirm & Mark Ready to Deliver'}
+                      <Package className="h-5 w-5 mr-2" />
+                      {uploadingPhoto ? 'Processing...' : 'Customer Will Pickup'}
+                    </Button>
+                    <Button 
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => setDeliveryChoiceStep(false)}
+                      disabled={uploadingPhoto}
+                    >
+                      Back to Photo
                     </Button>
                   </div>
                 </div>

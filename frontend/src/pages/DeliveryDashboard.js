@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   Truck, MapPin, Phone, User, Clock, Package,
-  CheckCircle, LogOut, Navigation, RefreshCw
+  CheckCircle, LogOut, Navigation, RefreshCw, DollarSign, CreditCard
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -75,137 +75,188 @@ const DeliveryDashboard = () => {
     logout();
   };
 
-  const OrderCard = ({ order, type }) => (
-    <Card className="mb-3 border-l-4" style={{ borderLeftColor: type === 'available' ? '#06b6d4' : '#8b5cf6' }}>
-      <CardContent className="p-4">
-        <div className="flex justify-between items-start mb-3">
-          <div>
-            <span className="font-bold text-lg" data-testid={`order-num-${order.order_number}`}>#{order.order_number}</span>
-            <Badge className="ml-2 text-xs" variant="outline">
-              {order.status === 'ready_to_deliver' ? 'Ready' : order.status === 'picked_up' ? 'Picked Up' : order.status}
-            </Badge>
-          </div>
-          <span className="text-sm text-gray-500">
-            <Clock className="h-3 w-3 inline mr-1" />
-            {order.delivery_time}
-          </span>
-        </div>
-
-        {/* Cake Photo */}
-        {order.actual_cake_image_url && (
-          <div className="mb-3">
-            <img 
-              src={order.actual_cake_image_url.startsWith('http') ? order.actual_cake_image_url : `${API_URL}${order.actual_cake_image_url}`}
-              alt="Cake" 
-              className="w-full h-40 object-cover rounded-lg"
-            />
-          </div>
-        )}
-
-        {/* Customer Info */}
-        <div className="space-y-2 mb-3">
-          <div className="flex items-center gap-2 text-sm">
-            <User className="h-4 w-4 text-gray-400" />
-            <span className="font-medium">{order.customer_info?.name}</span>
-          </div>
-          {order.customer_info?.phone && (
-            <a href={`tel:${order.customer_info.phone}`} className="flex items-center gap-2 text-sm text-blue-600">
-              <Phone className="h-4 w-4" />
-              {order.customer_info.phone}
-            </a>
-          )}
-          {order.delivery_address && (
-            <div className="flex items-start gap-2 text-sm">
-              <MapPin className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
-              <span>{order.delivery_address}{order.delivery_city ? `, ${order.delivery_city}` : ''}</span>
+  const OrderCard = ({ order, type }) => {
+    const pendingAmount = (order.total_amount || 0) - (order.paid_amount || 0);
+    const isPaid = pendingAmount <= 0;
+    
+    return (
+      <Card className="mb-3 border-l-4" style={{ borderLeftColor: type === 'available' ? '#06b6d4' : '#8b5cf6' }}>
+        <CardContent className="p-4">
+          <div className="flex justify-between items-start mb-3">
+            <div>
+              <span className="font-bold text-lg" data-testid={`order-num-${order.order_number}`}>#{order.order_number}</span>
+              <Badge className="ml-2 text-xs" variant="outline">
+                {order.status === 'ready_to_deliver' ? 'Ready' : order.status === 'picked_up' ? 'Picked Up' : order.status}
+              </Badge>
             </div>
-          )}
-        </div>
+            <span className="text-sm text-gray-500">
+              <Clock className="h-3 w-3 inline mr-1" />
+              {order.delivery_time}
+            </span>
+          </div>
 
-        {/* Order details */}
-        <div className="bg-gray-50 rounded-lg p-3 mb-3 text-sm space-y-1">
-          <div className="flex justify-between">
-            <span className="text-gray-500">Flavour</span>
-            <span className="font-medium">{order.flavour}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-500">Size</span>
-            <span className="font-medium">{order.size_pounds} Pounds</span>
-          </div>
-          {order.name_on_cake && (
-            <div className="flex justify-between">
-              <span className="text-gray-500">Message</span>
-              <span className="font-medium">{order.name_on_cake}</span>
+          {/* Payment Status Banner */}
+          <div className={`rounded-lg p-3 mb-3 flex items-center justify-between ${isPaid ? 'bg-green-50 border border-green-200' : 'bg-orange-50 border border-orange-200'}`}
+               data-testid={`payment-status-${order.id}`}>
+            <div className="flex items-center gap-2">
+              {isPaid ? (
+                <CheckCircle className="h-5 w-5 text-green-600" />
+              ) : (
+                <CreditCard className="h-5 w-5 text-orange-600" />
+              )}
+              <div>
+                <p className={`font-bold text-sm ${isPaid ? 'text-green-700' : 'text-orange-700'}`}>
+                  {isPaid ? 'FULLY PAID' : 'PAYMENT PENDING'}
+                </p>
+                <p className="text-xs text-gray-600">
+                  Total: Rs.{(order.total_amount || 0).toFixed(2)}
+                  {!isPaid && ` | Paid: Rs.${(order.paid_amount || 0).toFixed(2)}`}
+                </p>
+              </div>
             </div>
-          )}
-          <div className="flex justify-between">
-            <span className="text-gray-500">Date</span>
-            <span className="font-medium">{order.delivery_date}</span>
-          </div>
-        </div>
-
-        {/* Special Instructions */}
-        {order.special_instructions && (
-          <div className="bg-yellow-50 rounded-lg p-3 mb-3 border border-yellow-200">
-            <p className="text-xs font-semibold text-yellow-700 mb-1">Instructions</p>
-            <ul className="list-disc list-inside text-sm space-y-0.5">
-              {order.special_instructions.split('\n').filter(l => l.trim()).map((line, i) => (
-                <li key={i}>{line.trim()}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {/* Action Buttons */}
-        {type === 'available' && (
-          <Button
-            className="w-full bg-cyan-600 hover:bg-cyan-700 text-white"
-            onClick={() => acceptOrder(order.id)}
-            disabled={accepting === order.id}
-            data-testid={`accept-order-btn-${order.id}`}
-          >
-            {accepting === order.id ? (
-              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <CheckCircle className="h-4 w-4 mr-2" />
+            {!isPaid && (
+              <div className="text-right">
+                <p className="font-bold text-orange-700 text-lg" data-testid={`pending-amount-${order.id}`}>
+                  Rs.{pendingAmount.toFixed(2)}
+                </p>
+                <p className="text-xs text-orange-600">To Collect</p>
+              </div>
             )}
-            {accepting === order.id ? 'Accepting...' : 'Accept Order'}
-          </Button>
-        )}
+          </div>
 
-        {type === 'my' && order.status === 'picked_up' && (
-          <div className="flex gap-2">
-            <a 
-              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.delivery_address || '')}`}
-              target="_blank"
-              rel="noreferrer"
-              className="flex-1"
-            >
-              <Button variant="outline" className="w-full text-blue-600 border-blue-300">
-                <Navigation className="h-4 w-4 mr-2" />
-                Navigate
-              </Button>
-            </a>
+          {/* Customer Address - Prominent */}
+          {order.delivery_address && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3" data-testid={`delivery-address-${order.id}`}>
+              <div className="flex items-start gap-2">
+                <MapPin className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="text-xs font-semibold text-blue-700 mb-1">DELIVERY ADDRESS</p>
+                  <p className="text-sm font-medium">{order.delivery_address}</p>
+                  {order.delivery_city && <p className="text-xs text-gray-500">{order.delivery_city}</p>}
+                  {order.zone_name && <p className="text-xs text-gray-400">Zone: {order.zone_name}</p>}
+                </div>
+                <a 
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.delivery_address || '')}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="bg-blue-600 text-white p-2 rounded-lg flex-shrink-0"
+                >
+                  <Navigation className="h-4 w-4" />
+                </a>
+              </div>
+            </div>
+          )}
+
+          {/* Cake Photo */}
+          {order.actual_cake_image_url && (
+            <div className="mb-3">
+              <img 
+                src={order.actual_cake_image_url.startsWith('http') ? order.actual_cake_image_url : `${API_URL}${order.actual_cake_image_url}`}
+                alt="Cake" 
+                className="w-full h-40 object-cover rounded-lg"
+              />
+            </div>
+          )}
+
+          {/* Customer Info */}
+          <div className="space-y-2 mb-3">
+            <div className="flex items-center gap-2 text-sm">
+              <User className="h-4 w-4 text-gray-400" />
+              <span className="font-medium">{order.customer_info?.name}</span>
+            </div>
+            {order.customer_info?.phone && (
+              <a href={`tel:${order.customer_info.phone}`} className="flex items-center gap-2 text-sm text-blue-600">
+                <Phone className="h-4 w-4" />
+                {order.customer_info.phone}
+              </a>
+            )}
+          </div>
+
+          {/* Order details */}
+          <div className="bg-gray-50 rounded-lg p-3 mb-3 text-sm space-y-1">
+            <div className="flex justify-between">
+              <span className="text-gray-500">Flavour</span>
+              <span className="font-medium">{order.flavour}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Size</span>
+              <span className="font-medium">{order.size_pounds} Pounds</span>
+            </div>
+            {order.name_on_cake && (
+              <div className="flex justify-between">
+                <span className="text-gray-500">Message</span>
+                <span className="font-medium">{order.name_on_cake}</span>
+              </div>
+            )}
+            <div className="flex justify-between">
+              <span className="text-gray-500">Date</span>
+              <span className="font-medium">{order.delivery_date}</span>
+            </div>
+          </div>
+
+          {/* Special Instructions */}
+          {order.special_instructions && (
+            <div className="bg-yellow-50 rounded-lg p-3 mb-3 border border-yellow-200">
+              <p className="text-xs font-semibold text-yellow-700 mb-1">Instructions</p>
+              <ul className="list-disc list-inside text-sm space-y-0.5">
+                {order.special_instructions.split('\n').filter(l => l.trim()).map((line, i) => (
+                  <li key={i}>{line.trim()}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          {type === 'available' && (
             <Button
-              className="flex-1 bg-green-600 hover:bg-green-700 text-white"
-              onClick={() => updateDeliveryStatus(order.id, 'delivered')}
-              data-testid={`mark-delivered-btn-${order.id}`}
+              className="w-full bg-cyan-600 hover:bg-cyan-700 text-white"
+              onClick={() => acceptOrder(order.id)}
+              disabled={accepting === order.id}
+              data-testid={`accept-order-btn-${order.id}`}
             >
-              <CheckCircle className="h-4 w-4 mr-2" />
-              Delivered
+              {accepting === order.id ? (
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <CheckCircle className="h-4 w-4 mr-2" />
+              )}
+              {accepting === order.id ? 'Accepting...' : 'Accept Order'}
             </Button>
-          </div>
-        )}
+          )}
 
-        {type === 'my' && order.status === 'delivered' && (
-          <div className="text-center py-2 text-green-600 font-medium text-sm">
-            <CheckCircle className="h-4 w-4 inline mr-1" />
-            Delivered Successfully
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
+          {type === 'my' && order.status === 'picked_up' && (
+            <div className="flex gap-2">
+              <a 
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.delivery_address || '')}`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex-1"
+              >
+                <Button variant="outline" className="w-full text-blue-600 border-blue-300">
+                  <Navigation className="h-4 w-4 mr-2" />
+                  Navigate
+                </Button>
+              </a>
+              <Button
+                className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                onClick={() => updateDeliveryStatus(order.id, 'delivered')}
+                data-testid={`mark-delivered-btn-${order.id}`}
+              >
+                <CheckCircle className="h-4 w-4 mr-2" />
+                Delivered
+              </Button>
+            </div>
+          )}
+
+          {type === 'my' && order.status === 'delivered' && (
+            <div className="text-center py-2 text-green-600 font-medium text-sm">
+              <CheckCircle className="h-4 w-4 inline mr-1" />
+              Delivered Successfully
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
 
   if (loading) {
     return (

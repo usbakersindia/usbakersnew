@@ -1382,12 +1382,15 @@ async def set_order_pickup(
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     
+    update_fields = {
+        "pickup_by_customer": pickup,
+        "needs_delivery": not pickup,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
     await db.orders.update_one(
         {"id": order_id},
-        {"$set": {
-            "pickup_by_customer": pickup,
-            "updated_at": datetime.now(timezone.utc).isoformat()
-        }}
+        {"$set": update_fields}
     )
     return {"message": f"Order set as {'customer pickup' if pickup else 'delivery'}"}
 
