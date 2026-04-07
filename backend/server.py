@@ -407,8 +407,10 @@ class Order(BaseModel):
     
     # Flags
     is_credit_order: bool = False  # NEW: For credit orders
+    is_complementary: bool = False  # NEW: Complementary order (no payment sync)
     credit_released_by: Optional[str] = None  # Super Admin who released credit order
     credit_released_at: Optional[datetime] = None
+    pickup_by_customer: bool = False  # Customer picks up instead of delivery
     voice_instruction_url: Optional[str] = None  # NEW: Voice recording URL
     is_hold: bool = False  # Not on hold by default
     is_ready: bool = False
@@ -1337,6 +1339,57 @@ async def mark_order_as_credit(
     )
     
     return {"message": "Order marked as credit successfully"}
+
+@api_router.get("/orders/credit")
+async def get_credit_orders(
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.OUTLET_ADMIN, UserRole.ORDER_MANAGER]))
+):
+    """Get all credit orders"""
+    orders = await db.orders.find(
+        {"is_credit_order": True, "is_deleted": False},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(500)
+    return orders
+
+@api_router.post("/orders/{order_id}/mark-complementary")
+async def mark_order_complementary(
+    order_id: str,
+    is_complementary: bool = True,
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Mark/unmark a credit order as complementary"""
+    order = await db.orders.find_one({"id": order_id, "is_credit_order": True}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Credit order not found")
+    
+    await db.orders.update_one(
+        {"id": order_id},
+        {"$set": {
+            "is_complementary": is_complementary,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    return {"message": f"Order {'marked as complementary' if is_complementary else 'unmarked as complementary'}"}
+
+@api_router.post("/orders/{order_id}/set-pickup")
+async def set_order_pickup(
+    order_id: str,
+    pickup: bool = True,
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.OUTLET_ADMIN, UserRole.ORDER_MANAGER]))
+):
+    """Set order as customer pickup (no delivery needed)"""
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    await db.orders.update_one(
+        {"id": order_id},
+        {"$set": {
+            "pickup_by_customer": pickup,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    return {"message": f"Order set as {'customer pickup' if pickup else 'delivery'}"}
 
 @api_router.post("/orders/{order_id}/release-credit")
 async def release_credit_order(
