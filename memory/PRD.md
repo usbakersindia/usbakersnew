@@ -6,47 +6,31 @@ Comprehensive CRM and management system for a multi-outlet bakery chain named "U
 ## Tech Stack
 - Frontend: React, Tailwind CSS, shadcn/ui, Craco
 - Backend: FastAPI, MongoDB (Motor), Pydantic
-- Authentication: JWT with multi-role RBAC
-- 3rd Party: PetPooja POS Webhook, MSG91 (WhatsApp)
+- Authentication: JWT with multi-role RBAC (super_admin, outlet_admin, kitchen, order_manager, delivery, factory)
+- 3rd Party: PetPooja POS Webhook, MSG91/AiSensy (WhatsApp)
 
 ## Core Features (Implemented)
 - Multi-outlet order management (New Order, Pending, Hold, Manage)
-- Kitchen Dashboard (sidebar-less, dedicated API)
+- Kitchen Dashboard (sidebar-less, dedicated API, time-slot grouping, individual prepare buttons)
 - Payments tracking with pagination
 - Customer management
 - Zone management with edit/delete/description
-- User & Role management (Super Admin, Admin, Kitchen, Sales)
+- User & Role management (Super Admin, Admin, Kitchen, Sales, Delivery, Factory)
 - Settings: System settings, Branch thresholds, Flavours, Occasions, Time Slots (clock picker)
-- KOT print with QR code and PetPooja billing info
+- KOT print (80mm thermal printer compatible, monospace, dashed lines)
 - PetPooja sync integration
 - Reports and Incentive Reports
-- Cake Image Reports
-- Credit order workflow (via Pending Orders)
-- ManageOrders: Status dropdown, Edit dialog, More actions menu, Pagination
+- Cake Image Reports with filters
+- Credit Orders page with Complementary toggle
+- ManageOrders: Status dropdown, Edit dialog, More actions menu, Pagination, Bulk KOT print
+- Ready to Deliver flow: Kitchen marks ready -> Counter captures photo -> Deliver or Pickup choice -> Incentive calculated
+- Delivery Dashboard: Mobile-optimized, payment status display, address card with navigation, accept/deliver flow
+- Camera capture with Deliver vs Customer Pickup branching
 
-## What's Been Implemented (Latest Session - March 28-30, 2026)
-- Fixed Payments.js JSX syntax error (missing React fragment wrapper for pagination)
-- Implemented Clock/Time Picker for Delivery Time Slots in Settings
-- Fixed Kitchen Dashboard logout button missing in empty state (no orders) view
-- Created seed script (`backend/seed_data.py`) with dummy data
-- Added "Reset System" button in Settings (Danger Zone)
-- Fixed "Mark as Credit" flow (now changes lifecycle_status to active)
-- Special Instructions: multi-line bullet format in NewOrder, Kitchen Dashboard, ManageOrders
-- Audio instructions: added native `<audio controls>` player in Kitchen Dashboard
-- **Ready to Deliver flow**: Kitchen marks ready → Branch captures cake photo via camera → Auto-marks "ready_to_deliver" → Incentive calculated
-- **New status: `ready_to_deliver`** added to OrderStatus enum
-- **Camera capture popup** in ManageOrders for branch/counter staff
-- **Delivery Dashboard**: Mobile-optimized, real-time available orders, accept flow, Navigate + Delivered buttons
-- **Cake Image Report**: Redesigned with Order ID, Customer Name, Phone Number filters + side-by-side comparison layout with pagination
-- **Kitchen Dashboard v2**: Start Preparing flow, time slot grouping, ready orders in green at bottom, status badges (Waiting/Preparing/Ready)
-- **ManageOrders v2**: New tabs (Preparing, To Deliver), bulk KOT print with checkboxes, Assign Delivery Person dialog, in_progress status
-- **Delivery Assignment**: Counter/Manager assigns delivery person manually via dropdown (not self-accept)
-- **KOT Redesign**: Combined delivery status + date/time, removed PetPooja billing box, instructions as bullet list
-- **Edit Order fix**: Added `occasion` to allowed fields, fixed orphaned dialog tags
-- **Image capture fix**: Fixed duplicate setState in capturePhoto blob creation
-- Created seed script (`backend/seed_data.py`) with dummy data: 3 outlets, 9 zones, 5 users, 15 orders (today/tomorrow/+2/+3 days), 8 flavours, 5 occasions, 6 time slots, 2 sales persons
-- Added "Reset System" button in Settings (Danger Zone) with confirmation dialog — clears all data except super admin
-- Added `POST /api/system-reset` backend endpoint (replaced text input with hour/minute/AM-PM selectors)
+## What's Been Implemented (Latest Session - April 7, 2026)
+- Photo Upload Branching: After counter captures cake photo, dialog asks "Send for Delivery" or "Customer Will Pickup" (if order has delivery). Pickup sets needs_delivery=false.
+- DeliveryDashboard: Added payment status banner (FULLY PAID / PAYMENT PENDING with collect amount), prominent delivery address card with inline Google Maps navigation button
+- Backend: Updated `set-pickup` endpoint to also toggle `needs_delivery` field
 
 ## Prioritized Backlog
 ### P1
@@ -54,16 +38,25 @@ Comprehensive CRM and management system for a multi-outlet bakery chain named "U
 - PetPooja auto-sync verification (user must test on VPS)
 
 ### P3
-- Backend refactoring: Break `server.py` (~4350 lines) into modular `/routes`, `/models`, `/utils`
+- Backend refactoring: Break `server.py` (~4500 lines) into modular `/routes`, `/models`, `/utils`
 
 ## Key API Endpoints
 - `PATCH /api/orders/{order_id}` - Update order details
 - `PATCH /api/zones/{zone_id}` - Update zone details
 - `POST /api/orders/{order_id}/mark-credit` - Move pending order to credit
+- `POST /api/orders/{order_id}/set-pickup` - Set as customer pickup (also toggles needs_delivery)
+- `POST /api/orders/{order_id}/ready-to-deliver` - Mark ready to deliver with photo
+- `POST /api/orders/{order_id}/mark-complementary` - Toggle complementary status
+- `GET /api/orders/credit` - Get credit orders
+- `GET /api/delivery/available-orders` - Available orders for delivery
+- `GET /api/delivery/my-orders` - Delivery person's assigned orders
 - `POST /api/time-slots` - Create delivery time slot
 - `GET /api/time-slots` - Get active time slots
-- `DELETE /api/time-slots/{slot_id}` - Soft delete time slot
 
 ## Key Credentials
-- Admin: admin@usbakers.com / admin123
+- Super Admin: admin@usbakers.com / admin123
 - Kitchen: kitchen@usbakers.com / kitchen123
+- Outlet: outlet@usbakers.com / outlet123
+- Manager: manager@usbakers.com / manager123
+- Delivery: delivery@usbakers.com / delivery123
+- Factory: factory@usbakers.com / factory123
