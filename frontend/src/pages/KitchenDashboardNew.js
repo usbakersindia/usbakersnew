@@ -98,7 +98,9 @@ const KitchenDashboardNew = () => {
 
   const getImageUrl = (url) => {
     if (!url) return '';
-    return url.startsWith('http') ? url : `${BACKEND_URL}${url}`;
+    if (url.startsWith('http')) return url;
+    if (url.startsWith('/uploads/')) return `${BACKEND_URL}/api${url}`;
+    return `${BACKEND_URL}${url}`;
   };
 
   const parseTimeTo24 = (timeStr) => {

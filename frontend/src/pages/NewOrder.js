@@ -828,7 +828,7 @@ const NewOrder = () => {
                   {formData.cake_image_url ? (
                     <div className="relative inline-block">
                       <img
-                        src={`${BACKEND_URL}${formData.cake_image_url}`}
+                        src={formData.cake_image_url.startsWith('http') ? formData.cake_image_url : `${BACKEND_URL}${formData.cake_image_url.startsWith('/uploads/') ? '/api' + formData.cake_image_url : formData.cake_image_url}`}
                         alt="Cake"
                         className="w-32 h-32 object-cover rounded"
                       />
@@ -862,7 +862,7 @@ const NewOrder = () => {
                   {formData.secondary_images.map((img, index) => (
                     <div key={index} className="relative inline-block">
                       <img
-                        src={`${BACKEND_URL}${img}`}
+                        src={img.startsWith('http') ? img : `${BACKEND_URL}${img.startsWith('/uploads/') ? '/api' + img : img}`}
                         alt={`Secondary ${index + 1}`}
                         className="w-24 h-24 object-cover rounded"
                       />

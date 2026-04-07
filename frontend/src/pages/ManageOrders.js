@@ -140,6 +140,13 @@ const ManageOrders = () => {
   const [occasionFilter, setOccasionFilter] = useState('all');
   const [flavourFilter, setFlavourFilter] = useState('all');
 
+  const getImageUrl = (url) => {
+    if (!url) return '';
+    if (url.startsWith('http')) return url;
+    if (url.startsWith('/uploads/')) return `${API_URL}/api${url}`;
+    return `${API_URL}${url}`;
+  };
+
   // Payment form
   const [paymentForm, setPaymentForm] = useState({
     amount: '',
@@ -1139,17 +1146,13 @@ const ManageOrders = () => {
                                 <div 
                                   className="cursor-pointer hover:opacity-80 transition-opacity"
                                   onClick={() => {
-                                    // Check if URL is already absolute
-                                    const imageUrl = order.cake_image_url.startsWith('http') 
-                                      ? order.cake_image_url 
-                                      : `${API_URL}${order.cake_image_url}`;
-                                    setPreviewImage(imageUrl);
+                                    setPreviewImage(getImageUrl(order.cake_image_url));
                                     setImagePreviewOpen(true);
                                   }}
                                   title="Click to preview"
                                 >
                                   <img
-                                    src={order.cake_image_url.startsWith('http') ? order.cake_image_url : `${API_URL}${order.cake_image_url}`}
+                                    src={getImageUrl(order.cake_image_url)}
                                     alt="Cake"
                                     className="w-12 h-12 object-cover rounded border-2 border-gray-200"
                                   />

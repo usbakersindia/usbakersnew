@@ -443,7 +443,7 @@ const HoldOrders = () => {
                 <div>
                   <h4 className="font-semibold mb-2">Cake Image</h4>
                   <img
-                    src={`${BACKEND_URL}${selectedOrder.cake_image_url}`}
+                    src={selectedOrder.cake_image_url?.startsWith('http') ? selectedOrder.cake_image_url : `${BACKEND_URL}${selectedOrder.cake_image_url?.startsWith('/uploads/') ? '/api' + selectedOrder.cake_image_url : selectedOrder.cake_image_url}`}
                     alt="Cake"
                     className="w-64 h-64 object-cover rounded"
                   />

@@ -16,6 +16,13 @@ const DeliveryDashboard = () => {
   const [activeTab, setActiveTab] = useState('available');
   const [availableOrders, setAvailableOrders] = useState([]);
   const [myOrders, setMyOrders] = useState([]);
+
+  const getImageUrl = (url) => {
+    if (!url) return '';
+    if (url.startsWith('http')) return url;
+    if (url.startsWith('/uploads/')) return `${API_URL}/api${url}`;
+    return `${API_URL}${url}`;
+  };
   const [loading, setLoading] = useState(true);
   const [accepting, setAccepting] = useState(null);
 
@@ -151,7 +158,7 @@ const DeliveryDashboard = () => {
           {order.actual_cake_image_url && (
             <div className="mb-3">
               <img 
-                src={order.actual_cake_image_url.startsWith('http') ? order.actual_cake_image_url : `${API_URL}${order.actual_cake_image_url}`}
+                src={getImageUrl(order.actual_cake_image_url)}
                 alt="Cake" 
                 className="w-full h-40 object-cover rounded-lg"
               />

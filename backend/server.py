@@ -1634,7 +1634,7 @@ async def upload_image(
             f.write(contents)
         
         # Return URL (relative path)
-        image_url = f"/uploads/{unique_filename}"
+        image_url = f"/api/uploads/{unique_filename}"
         return {"url": image_url, "filename": unique_filename}
     
     except Exception as e:
@@ -4581,7 +4581,7 @@ async def upload_voice_instruction(
             buffer.write(content)
         
         # Return URL
-        file_url = f"/uploads/voice-instructions/{unique_filename}"
+        file_url = f"/api/uploads/voice-instructions/{unique_filename}"
         return {"file_url": file_url, "message": "Voice instruction uploaded successfully"}
     
     except Exception as e:
@@ -4596,7 +4596,7 @@ async def health_check():
 app.include_router(api_router)
 
 # Serve uploaded images
-app.mount("/uploads", StaticFiles(directory=str(ROOT_DIR / "uploads")), name="uploads")
+app.mount("/api/uploads", StaticFiles(directory=str(ROOT_DIR / "uploads")), name="uploads")
 
 app.add_middleware(
     CORSMiddleware,
