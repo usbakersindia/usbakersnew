@@ -986,6 +986,21 @@ async def reset_system(
         upsert=True
     )
 
+    # Re-seed default flavours and occasions so New Order form works
+    default_flavours = ["Chocolate Truffle", "Vanilla", "Red Velvet", "Butterscotch", "Black Forest", "Pineapple", "Mango", "Strawberry"]
+    default_occasions = ["Birthday", "Anniversary", "Wedding", "Baby Shower", "Corporate Event"]
+    
+    from uuid import uuid4 as _uuid4
+    now_str = datetime.now(timezone.utc).isoformat()
+    
+    flavour_docs = [{"id": str(_uuid4()), "name": f, "is_active": True, "created_by": current_user.id, "created_at": now_str} for f in default_flavours]
+    occasion_docs = [{"id": str(_uuid4()), "name": o, "is_active": True, "created_by": current_user.id, "created_at": now_str} for o in default_occasions]
+    
+    if flavour_docs:
+        await db.cake_flavours.insert_many(flavour_docs)
+    if occasion_docs:
+        await db.occasions.insert_many(occasion_docs)
+
     return {"message": "System reset successful", "cleared": cleared}
 
 @api_router.patch("/users/{user_id}/toggle-active")
@@ -2665,6 +2680,194 @@ async def get_kitchen_summary(
         "delivered": delivered_count,
         "pending_production": confirmed_count  # Orders needing to be made
     }
+
+@api_router.get("/factory/orders")
+async def get_factory_orders(
+    date: Optional[str] = None,
+    outlet_id: Optional[str] = None,
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.FACTORY_MANAGER]))
+):
+    """Get ALL orders across all outlets for factory view"""
+    query = {"is_deleted": False}
+    
+    if date:
+        query['delivery_date'] = date
+    
+    if outlet_id:
+        query['outlet_id'] = outlet_id
+    
+    # Factory sees all statuses except deleted
+    orders = await db.orders.find(query, {"_id": 0}).sort("delivery_date", -1).to_list(2000)
+    
+    # Get outlet names
+    outlets = await db.outlets.find({}, {"_id": 0, "id": 1, "name": 1}).to_list(100)
+    outlet_map = {o['id']: o['name'] for o in outlets}
+    
+    for order in orders:
+        order['outlet_name'] = outlet_map.get(order.get('outlet_id'), 'Unknown')
+    
+    return orders
+
+@api_router.get("/factory/orders/pdf")
+async def export_factory_orders_pdf(
+    date: Optional[str] = None,
+    outlet_id: Optional[str] = None,
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.FACTORY_MANAGER]))
+):
+    """Generate PDF of orders for factory with all details and cake images"""
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.lib.units import mm
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        import httpx
+        
+        query = {"is_deleted": False}
+        if date:
+            query['delivery_date'] = date
+        else:
+            query['delivery_date'] = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+        if outlet_id:
+            query['outlet_id'] = outlet_id
+        
+        orders = await db.orders.find(query, {"_id": 0}).sort("delivery_date", 1).to_list(2000)
+        
+        outlets_list = await db.outlets.find({}, {"_id": 0, "id": 1, "name": 1}).to_list(100)
+        outlet_map = {o['id']: o['name'] for o in outlets_list}
+        
+        report_date = date or datetime.now(timezone.utc).strftime('%Y-%m-%d')
+        pdf_path = f"/tmp/factory_orders_{report_date}.pdf"
+        doc = SimpleDocTemplate(pdf_path, pagesize=A4, rightMargin=15*mm, leftMargin=15*mm, topMargin=15*mm, bottomMargin=15*mm)
+        styles = getSampleStyleSheet()
+        
+        title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=16, textColor=colors.HexColor('#e92587'), spaceAfter=5)
+        subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], fontSize=10, textColor=colors.grey)
+        cell_style = ParagraphStyle('Cell', parent=styles['Normal'], fontSize=8, leading=10)
+        bold_cell = ParagraphStyle('BoldCell', parent=styles['Normal'], fontSize=8, leading=10, fontName='Helvetica-Bold')
+        
+        elements = []
+        
+        elements.append(Paragraph("US BAKERS - Factory Order Report", title_style))
+        elements.append(Paragraph(f"Date: {report_date} | Total Orders: {len(orders)}", subtitle_style))
+        elements.append(Spacer(1, 10))
+        
+        if not orders:
+            elements.append(Paragraph("No orders found for this date.", styles['Normal']))
+        else:
+            header = ['#', 'Order', 'Outlet', 'Customer', 'Flavour', 'Size', 'Name on Cake', 'Delivery', 'Status', 'Amount']
+            table_data = [header]
+            
+            for i, order in enumerate(orders, 1):
+                cust = order.get('customer_info') or {}
+                delivery = 'Yes' if order.get('needs_delivery') else 'No'
+                status_text = (order.get('status') or 'pending').replace('_', ' ').title()
+                row = [
+                    str(i),
+                    Paragraph(str(order.get('order_number') or ''), cell_style),
+                    Paragraph(str(outlet_map.get(order.get('outlet_id'), 'N/A')), cell_style),
+                    Paragraph(f"{cust.get('name') or 'N/A'}\n{cust.get('phone') or ''}", cell_style),
+                    Paragraph(str(order.get('flavour') or 'N/A'), cell_style),
+                    f"{order.get('size_pounds') or ''} lbs",
+                    Paragraph(str(order.get('name_on_cake') or 'N/A'), cell_style),
+                    delivery,
+                    Paragraph(status_text, bold_cell),
+                    f"Rs.{order.get('total_amount') or 0:.0f}"
+                ]
+                table_data.append(row)
+            
+            col_widths = [15*mm, 20*mm, 25*mm, 35*mm, 22*mm, 15*mm, 25*mm, 15*mm, 22*mm, 20*mm]
+            table = Table(table_data, colWidths=col_widths, repeatRows=1)
+            table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e92587')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 8),
+                ('FONTSIZE', (0, 1), (-1, -1), 7),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#fff5f9')]),
+                ('TOPPADDING', (0, 0), (-1, -1), 3),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ]))
+            elements.append(table)
+            
+            elements.append(Spacer(1, 15))
+            elements.append(Paragraph("Order Details with Cake Images", ParagraphStyle('DetailTitle', parent=styles['Heading2'], fontSize=13, textColor=colors.HexColor('#e92587'))))
+            elements.append(Spacer(1, 8))
+            
+            for order in orders:
+                cust = order.get('customer_info') or {}
+                elements.append(Paragraph(f"<b>Order #{order.get('order_number') or ''} - {order.get('flavour') or 'N/A'} ({order.get('size_pounds') or ''} lbs)</b>", styles['Heading4']))
+                
+                detail_data = [
+                    ['Customer:', f"{cust.get('name') or 'N/A'} | {cust.get('phone') or 'N/A'}"],
+                    ['Outlet:', str(outlet_map.get(order.get('outlet_id'), 'N/A'))],
+                    ['Occasion:', str(order.get('occasion') or 'N/A')],
+                    ['Name on Cake:', str(order.get('name_on_cake') or 'N/A')],
+                    ['Delivery:', f"{'Yes' if order.get('needs_delivery') else 'No'} | {order.get('delivery_date') or ''} {order.get('delivery_time') or ''}"],
+                    ['Status:', (order.get('status') or 'pending').replace('_', ' ').title()],
+                    ['Amount:', f"Rs.{order.get('total_amount') or 0:.2f} (Paid: Rs.{order.get('paid_amount') or 0:.2f})"],
+                ]
+                if order.get('delivery_address'):
+                    detail_data.append(['Address:', order.get('delivery_address', '')])
+                if order.get('special_instructions'):
+                    detail_data.append(['Instructions:', order.get('special_instructions', '')])
+                
+                detail_table = Table(detail_data, colWidths=[30*mm, 140*mm])
+                detail_table.setStyle(TableStyle([
+                    ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 8),
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                    ('TOPPADDING', (0, 0), (-1, -1), 1),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
+                ]))
+                elements.append(detail_table)
+                
+                cake_url = order.get('cake_image_url', '')
+                if cake_url and cake_url.startswith('http'):
+                    try:
+                        async with httpx.AsyncClient(follow_redirects=True) as http_client:
+                            img_resp = await http_client.get(cake_url, timeout=5.0)
+                            if img_resp.status_code == 200 and 'image' in (img_resp.headers.get('content-type', '')):
+                                img_path = f"/tmp/cake_{order.get('id', 'x')[:8]}.jpg"
+                                with open(img_path, 'wb') as imgf:
+                                    imgf.write(img_resp.content)
+                                from PIL import Image as PILImage
+                                try:
+                                    pil_img = PILImage.open(img_path)
+                                    pil_img.verify()
+                                    elements.append(Spacer(1, 3))
+                                    elements.append(RLImage(img_path, width=50*mm, height=50*mm))
+                                except Exception:
+                                    pass
+                    except Exception:
+                        pass
+                elif cake_url and cake_url.startswith('/api/uploads/'):
+                    local_path = str(ROOT_DIR / cake_url.replace('/api/uploads/', 'uploads/'))
+                    if os.path.exists(local_path):
+                        from PIL import Image as PILImage
+                        try:
+                            pil_img = PILImage.open(local_path)
+                            pil_img.verify()
+                            elements.append(Spacer(1, 3))
+                            elements.append(RLImage(local_path, width=50*mm, height=50*mm))
+                        except Exception:
+                            pass
+                
+                elements.append(Spacer(1, 8))
+        
+        doc.build(elements)
+        
+        return FileResponse(
+            pdf_path,
+            media_type='application/pdf',
+            filename=f"factory_orders_{report_date}.pdf"
+        )
+    except Exception as e:
+        logger.error(f"PDF generation failed: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
 
 # ==================== REPORTS ENDPOINTS ====================
 

@@ -257,6 +257,9 @@ const NewOrder = () => {
   const handleSubmit = async (e, isPunchOrder = false) => {
     e.preventDefault();
     
+    // Prevent double submission
+    if (loading) return;
+    
     // Validate for punch orders
     if (isPunchOrder) {
       const errors = [];
@@ -300,12 +303,12 @@ const NewOrder = () => {
       const createdOrder = response.data;
       
       if (isPunchOrder) {
-        setSuccess(`✅ Punch Order Created! Order #: ${createdOrder.order_number}`);
-        alert(`✅ Punch Order Created!\n\nOrder #: ${createdOrder.order_number}\n\nStatus: Pending (waiting for 20% payment)\n\nIMPORTANT: Add Order # in PetPooja comment field.`);
-        setTimeout(() => navigate('/pending-orders'), 2000);
+        setSuccess(`Punch Order Created! Order #: ${createdOrder.order_number}`);
+        alert(`Punch Order Created!\n\nOrder #: ${createdOrder.order_number}\n\nStatus: Pending (waiting for payment threshold)\n\nIMPORTANT: Add Order # in PetPooja comment field.`);
+        navigate('/pending-orders');
       } else {
-        setSuccess(`✅ Hold Order Created! Order #: ${createdOrder.order_number}`);
-        setTimeout(() => navigate('/hold-orders'), 2000);
+        setSuccess(`Hold Order Created! Order #: ${createdOrder.order_number}`);
+        navigate('/hold-orders');
       }
     } catch (error) {
       setError(error.response?.data?.detail || 'Failed to create order');

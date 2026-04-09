@@ -1,72 +1,50 @@
 # US Bakers CRM - Product Requirements Document
 
-## Original Problem Statement
-Comprehensive CRM and management system for a multi-outlet bakery chain named "US Bakers". Includes order management, kitchen dashboard, payments tracking, zone management, PetPooja POS integration, customer management, and more.
-
 ## Tech Stack
-- Frontend: React, Tailwind CSS, shadcn/ui, Craco
-- Backend: FastAPI, MongoDB (Motor), Pydantic
-- Authentication: JWT with multi-role RBAC (super_admin, outlet_admin, kitchen, order_manager, delivery, factory)
+- Frontend: React, Tailwind CSS, shadcn/ui
+- Backend: FastAPI, MongoDB (Motor), Pydantic, ReportLab (PDF)
+- Auth: JWT with multi-role RBAC (super_admin, outlet_admin, kitchen, order_manager, delivery, factory_manager)
 - 3rd Party: PetPooja POS Webhook, MSG91/AiSensy (WhatsApp)
 
 ## Core Features (Implemented)
-- Multi-outlet order management (New Order, Pending, Hold, Manage)
-- Kitchen Dashboard (sidebar-less, dedicated API, time-slot grouping, individual prepare buttons)
+- Multi-outlet order management with full lifecycle
+- Kitchen Dashboard (sidebar-less, time-slot grouping)
+- Factory Dashboard with PDF export (all outlets, all orders, cake images)
+- Delivery Dashboard (mobile-optimized, payment status, address navigation)
+- Credit Orders with Complementary toggle
 - Payments tracking with pagination
-- Customer management
-- Zone management with edit/delete/description
-- User & Role management (Super Admin, Admin, Kitchen, Sales, Delivery, Factory)
-- Settings: System settings, Branch thresholds, Flavours, Occasions, Time Slots (clock picker)
-- KOT print (80mm thermal printer compatible, monospace, dashed lines)
-- PetPooja sync integration
-- Reports and Incentive Reports
-- Cake Image Reports with filters
-- Credit Orders page with Complementary toggle
-- ManageOrders: Status dropdown, Edit dialog, More actions menu, Pagination, Bulk KOT print
-- Ready to Deliver flow: Kitchen marks ready -> Counter captures photo -> Deliver or Pickup choice -> Incentive calculated
-- Delivery Dashboard: Mobile-optimized, payment status display, address card with navigation, accept/deliver flow
+- Zone management with edit/delete
 - Camera capture with Deliver vs Customer Pickup branching
-- Image uploads served via `/api/uploads/` static mount (ingress-compatible)
+- KOT print (80mm thermal, PetPooja billing, delivery status, name on cake)
+- Reports and Incentive Reports
+- System Reset with auto re-seed of flavours/occasions
+- Branch-specific payment thresholds (enforced in PetPooja webhooks)
 
-## What's Been Implemented (Latest Session - April 7, 2026)
-- **BUGFIX: Broken Image Upload** — Root cause: Static files were mounted at `/uploads` but Kubernetes ingress only routes `/api/*` to backend. Fixed by:
-  1. Changed static mount from `/uploads` to `/api/uploads` in server.py
-  2. Upload endpoint now returns `/api/uploads/filename.jpg` URLs
-  3. Added `getImageUrl()` normalizer in all frontend pages (ManageOrders, DeliveryDashboard, KitchenDashboard, CakeImageReport, NewOrder, HoldOrders)
-  4. Migrated existing DB records from `/uploads/` to `/api/uploads/` paths
-- Photo Upload Branching: After counter captures cake photo, dialog asks "Send for Delivery" or "Customer Will Pickup" (if order has delivery)
-- DeliveryDashboard: Added payment status banner (FULLY PAID / PAYMENT PENDING with collect amount), delivery address card with navigation
-- Backend: Updated `set-pickup` endpoint to also toggle `needs_delivery` field
-
-## IMPORTANT: VPS Deployment Note
-When deploying to VPS, run the migration script to fix old image URLs:
-```bash
-cd backend && python3 migrate_image_urls.py
-```
-
-## Prioritized Backlog
-### P1
-- Test KOT print functionality end-to-end
-- PetPooja auto-sync verification (user must test on VPS)
-
-### P3
-- Backend refactoring: Break `server.py` (~4500 lines) into modular `/routes`, `/models`, `/utils`
+## Latest Changes (April 9, 2026)
+1. **Factory Dashboard (NEW)** - `/factory` route with full order table, date/outlet filters, stats cards, Download PDF button. Factory can see ALL outlets.
+2. **Factory PDF Export** - `GET /api/factory/orders/pdf` generates A4 PDF with order summary table + detailed per-order section with cake images
+3. **Double Order Entry Fix** - Prevent double-click submission in NewOrder form. Button disabled during `loading` and navigate immediately after success
+4. **Flavours/Occasions Fix** - System reset now re-seeds default flavours and occasions so New Order form always has options
+5. **Time Slot → Time Picker** - Replaced dropdown with native `<input type="time">` in New Order form
+6. **Payment Threshold Bug** - Fixed two PetPooja webhook handlers that bypassed branch-specific thresholds
+7. **Image Upload Fix** - Static files served via `/api/uploads/` for ingress compatibility
 
 ## Key API Endpoints
-- `PATCH /api/orders/{order_id}` - Update order details
-- `PATCH /api/zones/{zone_id}` - Update zone details
-- `POST /api/orders/{order_id}/mark-credit` - Move pending order to credit
-- `POST /api/orders/{order_id}/set-pickup` - Set as customer pickup (also toggles needs_delivery)
-- `POST /api/orders/{order_id}/ready-to-deliver` - Mark ready to deliver with photo
-- `POST /api/orders/{order_id}/mark-complementary` - Toggle complementary status
-- `GET /api/orders/credit` - Get credit orders
-- `GET /api/delivery/available-orders` - Available orders for delivery
-- `POST /api/upload-image` - Upload image (returns `/api/uploads/filename`)
+- `GET /api/factory/orders` - All orders for factory (cross-outlet)
+- `GET /api/factory/orders/pdf` - PDF export with details + images
+- `POST /api/orders/{id}/set-pickup` - Toggle pickup (also updates needs_delivery)
+- `POST /api/upload-image` - Returns `/api/uploads/filename`
+- `POST /api/system-reset` - Clears data, re-seeds flavours/occasions
 
-## Key Credentials
+## Credentials
 - Super Admin: admin@usbakers.com / admin123
 - Kitchen: kitchen@usbakers.com / kitchen123
 - Outlet: outlet@usbakers.com / outlet123
 - Manager: manager@usbakers.com / manager123
 - Delivery: delivery@usbakers.com / delivery123
 - Factory: factory@usbakers.com / factory123
+
+## Backlog
+- P1: KOT thermal print end-to-end testing
+- P1: PetPooja auto-sync verification on VPS
+- P3: Backend refactoring (server.py ~5000 lines → modular routes)

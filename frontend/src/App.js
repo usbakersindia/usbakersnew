@@ -26,6 +26,7 @@ import PetPoojaSync from './pages/PetPoojaSync';
 import NavigatePage from './pages/Navigate';
 import IncentiveReport from './pages/IncentiveReport';
 import CakeImageReport from './pages/CakeImageReport';
+import FactoryDashboard from './pages/FactoryDashboard';
 import '@/App.css';
 
 const AppRoutes = () => {
@@ -64,7 +65,7 @@ const AppRoutes = () => {
       <Route
         path="/new-order"
         element={
-          <ProtectedRoute allowedRoles={['super_admin', 'outlet_admin', 'order_manager']}>
+          <ProtectedRoute allowedRoles={['super_admin', 'outlet_admin', 'order_manager', 'factory_manager']}>
             <NewOrder />
           </ProtectedRoute>
         }
@@ -162,6 +163,14 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute allowedRoles={['super_admin', 'kitchen', 'factory_manager']}>
             <KitchenDashboardNew />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/factory"
+        element={
+          <ProtectedRoute allowedRoles={['super_admin', 'factory_manager']}>
+            <FactoryDashboard />
           </ProtectedRoute>
         }
       />

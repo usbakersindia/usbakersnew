@@ -2,7 +2,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { LayoutDashboard, ShoppingCart, Clock, Store, Users, MapPin, Settings, LogOut, Menu, X, MessageSquare, List, Receipt, Truck, CreditCard, RefreshCw, Navigation, TrendingUp, Webhook, Wallet, ImageIcon } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Clock, Store, Users, MapPin, Settings, LogOut, Menu, X, MessageSquare, List, Receipt, Truck, CreditCard, RefreshCw, Navigation, TrendingUp, Webhook, Wallet, ImageIcon, Factory } from 'lucide-react';
 import { useState } from 'react';
 
 const Sidebar = () => {
@@ -41,7 +41,7 @@ const Sidebar = () => {
         { path: '/settings', label: 'Settings', icon: Settings, testId: 'nav-settings' }
       ]
     : [
-        // Outlet/User Menu - Check if user is Kitchen or Delivery role
+        // Outlet/User Menu - Check if user is Kitchen, Delivery, or Factory role
         ...(user?.role === 'kitchen' 
           ? [
               { path: '/kitchen', label: 'Kitchen Orders', icon: ShoppingCart, testId: 'nav-kitchen' },
@@ -50,6 +50,13 @@ const Sidebar = () => {
           : user?.role === 'delivery'
           ? [
               { path: '/delivery', label: 'Delivery Orders', icon: Truck, testId: 'nav-delivery' },
+            ]
+          : user?.role === 'factory_manager'
+          ? [
+              { path: '/factory', label: 'Factory Dashboard', icon: Factory, testId: 'nav-factory' },
+              { path: '/kitchen', label: 'Kitchen View', icon: ShoppingCart, testId: 'nav-kitchen' },
+              { path: '/new-order', label: 'New Order', icon: ShoppingCart, testId: 'nav-new-order' },
+              { path: '/reports', label: 'Reports', icon: Receipt, testId: 'nav-reports' },
             ]
           : [
               // Outlet Admin menu - NO Settings
