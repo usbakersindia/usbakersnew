@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import LayoutWithSidebar from '../components/LayoutWithSidebar';
 import { Button } from '@/components/ui/button';
@@ -27,7 +27,7 @@ const NewOrder = () => {
   const [occasions, setOccasions] = useState([]);
   const [timeSlots, setTimeSlots] = useState([]);
   const [loading, setLoading] = useState(false);
-  const submittingRef = React.useRef(false);
+  const submittingRef = useRef(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -267,6 +267,8 @@ const NewOrder = () => {
       const errors = [];
       if (!formData.customer_info.name) errors.push('Customer name');
       if (!formData.customer_info.phone) errors.push('Customer phone');
+      if (formData.customer_info.phone && formData.customer_info.phone.length !== 10) errors.push('Phone must be 10 digits');
+      if (!formData.customer_info.gender) errors.push('Gender');
       if (!formData.order_taken_by) errors.push('Order taken by');
       if (!formData.occasion) errors.push('Occasion');
       if (!formData.flavour) errors.push('Flavour');
@@ -286,6 +288,22 @@ const NewOrder = () => {
     setError('');
     setSuccess('');
     setLoading(true);
+
+    // Validate phone number length
+    if (formData.customer_info.phone && formData.customer_info.phone.length !== 10) {
+      setError('Phone number must be exactly 10 digits');
+      setLoading(false);
+      submittingRef.current = false;
+      return;
+    }
+
+    // Validate gender
+    if (!formData.customer_info.gender) {
+      setError('Gender is required');
+      setLoading(false);
+      submittingRef.current = false;
+      return;
+    }
 
     // Validate
     if (!formData.cake_image_url) {
@@ -450,15 +468,22 @@ const NewOrder = () => {
                   <Label>Phone *</Label>
                   <Input
                     required
+                    type="tel"
+                    maxLength={10}
                     value={formData.customer_info.phone}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 10);
                       setFormData({
                         ...formData,
-                        customer_info: { ...formData.customer_info, phone: e.target.value }
-                      })
-                    }
+                        customer_info: { ...formData.customer_info, phone: val }
+                      });
+                    }}
+                    placeholder="10 digit phone number"
                     data-testid="customer-phone-input"
                   />
+                  {formData.customer_info.phone && formData.customer_info.phone.length !== 10 && (
+                    <p className="text-xs text-red-500 mt-1">Phone number must be exactly 10 digits</p>
+                  )}
                 </div>
                 <div>
                   <Label>Alternate Phone</Label>
@@ -486,7 +511,7 @@ const NewOrder = () => {
                   />
                 </div>
                 <div>
-                  <Label>Gender</Label>
+                  <Label>Gender *</Label>
                   <Select
                     value={formData.customer_info.gender || ''}
                     onValueChange={(value) =>
@@ -496,8 +521,8 @@ const NewOrder = () => {
                       })
                     }
                   >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select gender" />
+                    <SelectTrigger className={!formData.customer_info.gender ? 'border-red-300' : ''}>
+                      <SelectValue placeholder="Select gender *" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="male">Male</SelectItem>
@@ -505,6 +530,9 @@ const NewOrder = () => {
                       <SelectItem value="other">Other</SelectItem>
                     </SelectContent>
                   </Select>
+                  {!formData.customer_info.gender && (
+                    <p className="text-xs text-red-500 mt-1">Gender is required</p>
+                  )}
                 </div>
               </div>
             </CardContent>

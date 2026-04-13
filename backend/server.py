@@ -1922,16 +1922,21 @@ async def delete_order(
     order_id: str,
     current_user: User = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.OUTLET_ADMIN, UserRole.ORDER_MANAGER]))
 ):
-    """Mark order as deleted (requires approval for non-super-admin) - Only for admins and order managers"""
+    """Mark order as deleted - Super admin and outlet admin can delete directly"""
     order = await db.orders.find_one({"id": order_id}, {"_id": 0})
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     
-    if current_user.role == UserRole.SUPER_ADMIN:
-        # Super admin can delete directly
+    if current_user.role in [UserRole.SUPER_ADMIN, UserRole.OUTLET_ADMIN]:
+        # Super admin and outlet admin can delete directly
         await db.orders.update_one(
             {"id": order_id},
-            {"$set": {"is_deleted": True, "delete_approved_by": current_user.id}}
+            {"$set": {
+                "is_deleted": True,
+                "deleted_at": datetime.now(timezone.utc).isoformat(),
+                "deleted_by": current_user.id,
+                "delete_approved_by": current_user.id
+            }}
         )
         return {"message": "Order deleted successfully"}
     else:
@@ -1941,6 +1946,20 @@ async def delete_order(
             {"$set": {"delete_requested_by": current_user.id}}
         )
         return {"message": "Delete request submitted for approval"}
+
+@api_router.get("/orders/deleted")
+async def get_deleted_orders(
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.OUTLET_ADMIN, UserRole.ORDER_MANAGER]))
+):
+    """Get all deleted orders"""
+    query = {"is_deleted": True}
+    
+    # Outlet admin can only see their outlet's deleted orders
+    if current_user.role == UserRole.OUTLET_ADMIN and current_user.outlet_id:
+        query["outlet_id"] = current_user.outlet_id
+    
+    orders = await db.orders.find(query, {"_id": 0}).sort("updated_at", -1).to_list(500)
+    return orders
 
 @api_router.patch("/orders/{order_id}")
 async def update_order(

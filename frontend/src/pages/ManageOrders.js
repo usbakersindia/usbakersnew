@@ -33,6 +33,7 @@ import {
   Trash2,
   Camera
 } from 'lucide-react';
+import { Mic } from 'lucide-react';
 import axios from 'axios';
 import * as XLSX from 'xlsx';
 
@@ -1155,6 +1156,13 @@ const ManageOrders = () => {
                               <div className="flex items-center space-x-2">
                                 <Package className="h-4 w-4 text-gray-400" />
                                 <span>{order.order_number}</span>
+                                {order.voice_instruction_url && (
+                                  <Mic 
+                                    className="h-3.5 w-3.5 text-blue-500 cursor-pointer" 
+                                    title="Has voice instructions - click View to listen"
+                                    onClick={() => handleViewOrder(order)}
+                                  />
+                                )}
                               </div>
                             </TableCell>
                             <TableCell>
@@ -1165,19 +1173,61 @@ const ManageOrders = () => {
                             </TableCell>
                             <TableCell>
                               {order.cake_image_url ? (
-                                <div 
-                                  className="cursor-pointer hover:opacity-80 transition-opacity"
-                                  onClick={() => {
-                                    setPreviewImage(getImageUrl(order.cake_image_url));
-                                    setImagePreviewOpen(true);
-                                  }}
-                                  title="Click to preview"
-                                >
-                                  <img
-                                    src={getImageUrl(order.cake_image_url)}
-                                    alt="Cake"
-                                    className="w-12 h-12 object-cover rounded border-2 border-gray-200"
-                                  />
+                                <div className="flex items-center gap-1">
+                                  <div 
+                                    className="cursor-pointer hover:opacity-80 transition-opacity"
+                                    onClick={() => {
+                                      setPreviewImage(getImageUrl(order.cake_image_url));
+                                      setImagePreviewOpen(true);
+                                    }}
+                                    title="Click to preview primary image"
+                                  >
+                                    <img
+                                      src={getImageUrl(order.cake_image_url)}
+                                      alt="Cake"
+                                      className="w-12 h-12 object-cover rounded border-2 border-pink-200"
+                                    />
+                                  </div>
+                                  {/* Show secondary images count */}
+                                  {order.secondary_images && order.secondary_images.length > 0 && (
+                                    <div 
+                                      className="cursor-pointer hover:opacity-80 transition-opacity relative"
+                                      onClick={() => {
+                                        setPreviewImage(getImageUrl(order.secondary_images[0]));
+                                        setSelectedOrder(order);
+                                        setImagePreviewOpen(true);
+                                      }}
+                                      title={`+${order.secondary_images.length} more images`}
+                                    >
+                                      <img
+                                        src={getImageUrl(order.secondary_images[0])}
+                                        alt="Secondary"
+                                        className="w-10 h-10 object-cover rounded border border-gray-200"
+                                      />
+                                      {order.secondary_images.length > 1 && (
+                                        <span className="absolute -top-1 -right-1 bg-pink-600 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
+                                          +{order.secondary_images.length - 1}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                  {/* Actual cake photo indicator */}
+                                  {order.actual_cake_image_url && (
+                                    <div 
+                                      className="cursor-pointer hover:opacity-80 transition-opacity"
+                                      onClick={() => {
+                                        setPreviewImage(getImageUrl(order.actual_cake_image_url));
+                                        setImagePreviewOpen(true);
+                                      }}
+                                      title="Actual cake photo"
+                                    >
+                                      <img
+                                        src={getImageUrl(order.actual_cake_image_url)}
+                                        alt="Actual"
+                                        className="w-10 h-10 object-cover rounded border-2 border-green-400"
+                                      />
+                                    </div>
+                                  )}
                                 </div>
                               ) : (
                                 <div className="w-12 h-12 bg-gray-100 rounded flex items-center justify-center">
@@ -1388,21 +1438,57 @@ const ManageOrders = () => {
         <Dialog open={imagePreviewOpen} onOpenChange={setImagePreviewOpen}>
           <DialogContent className="max-w-3xl">
             <DialogHeader>
-              <DialogTitle>Cake Photo Preview</DialogTitle>
+              <DialogTitle>Order Images</DialogTitle>
             </DialogHeader>
-            <div className="flex items-center justify-center bg-gray-100 rounded-lg p-4 min-h-[400px]">
-              {previewImage ? (
-                <img
-                  src={previewImage}
-                  alt="Cake Preview"
-                  className="max-w-full max-h-[70vh] object-contain rounded"
-                  onError={(e) => {
-                    console.error('Image failed to load:', previewImage);
-                    e.target.src = '/placeholder-image.png';
-                  }}
-                />
-              ) : (
-                <div className="text-gray-500">No image available</div>
+            <div className="space-y-4">
+              {/* Main preview */}
+              <div className="flex items-center justify-center bg-gray-100 rounded-lg p-4 min-h-[400px]">
+                {previewImage ? (
+                  <img
+                    src={previewImage}
+                    alt="Preview"
+                    className="max-w-full max-h-[60vh] object-contain rounded"
+                    onError={(e) => {
+                      console.error('Image failed to load:', previewImage);
+                      e.target.src = '/placeholder-image.png';
+                    }}
+                  />
+                ) : (
+                  <div className="text-gray-500">No image available</div>
+                )}
+              </div>
+              {/* Thumbnail gallery for all images */}
+              {selectedOrder && (
+                <div className="flex flex-wrap gap-2 border-t pt-3">
+                  {selectedOrder.cake_image_url && (
+                    <div 
+                      className={`cursor-pointer rounded border-2 ${previewImage === getImageUrl(selectedOrder.cake_image_url) ? 'border-pink-500' : 'border-gray-200'}`}
+                      onClick={() => setPreviewImage(getImageUrl(selectedOrder.cake_image_url))}
+                    >
+                      <img src={getImageUrl(selectedOrder.cake_image_url)} alt="Primary" className="w-16 h-16 object-cover rounded" />
+                      <p className="text-xs text-center text-gray-500">Primary</p>
+                    </div>
+                  )}
+                  {selectedOrder.secondary_images?.map((img, idx) => (
+                    <div 
+                      key={idx}
+                      className={`cursor-pointer rounded border-2 ${previewImage === getImageUrl(img) ? 'border-pink-500' : 'border-gray-200'}`}
+                      onClick={() => setPreviewImage(getImageUrl(img))}
+                    >
+                      <img src={getImageUrl(img)} alt={`Secondary ${idx + 1}`} className="w-16 h-16 object-cover rounded" />
+                      <p className="text-xs text-center text-gray-500">Extra {idx + 1}</p>
+                    </div>
+                  ))}
+                  {selectedOrder.actual_cake_image_url && (
+                    <div 
+                      className={`cursor-pointer rounded border-2 ${previewImage === getImageUrl(selectedOrder.actual_cake_image_url) ? 'border-green-500' : 'border-green-200'}`}
+                      onClick={() => setPreviewImage(getImageUrl(selectedOrder.actual_cake_image_url))}
+                    >
+                      <img src={getImageUrl(selectedOrder.actual_cake_image_url)} alt="Actual" className="w-16 h-16 object-cover rounded" />
+                      <p className="text-xs text-center text-green-600">Actual</p>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           </DialogContent>
@@ -1468,6 +1554,20 @@ const ManageOrders = () => {
                           <li key={idx} className="text-sm">{line.trim()}</li>
                         ))}
                       </ul>
+                    </div>
+                  </div>
+                )}
+
+                {/* Voice Instructions */}
+                {selectedOrder.voice_instruction_url && (
+                  <div>
+                    <Label>🎤 Voice Instructions</Label>
+                    <div className="mt-1 p-3 bg-blue-50 rounded border border-blue-200">
+                      <audio 
+                        controls 
+                        src={getImageUrl(selectedOrder.voice_instruction_url)} 
+                        className="w-full"
+                      />
                     </div>
                   </div>
                 )}

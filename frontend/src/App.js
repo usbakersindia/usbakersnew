@@ -27,6 +27,7 @@ import NavigatePage from './pages/Navigate';
 import IncentiveReport from './pages/IncentiveReport';
 import CakeImageReport from './pages/CakeImageReport';
 import FactoryDashboard from './pages/FactoryDashboard';
+import DeletedOrders from './pages/DeletedOrders';
 import '@/App.css';
 
 const AppRoutes = () => {
@@ -252,6 +253,14 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute allowedRoles={['super_admin', 'outlet_admin']}>
             <CakeImageReport />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/deleted-orders"
+        element={
+          <ProtectedRoute allowedRoles={['super_admin', 'outlet_admin', 'order_manager']}>
+            <DeletedOrders />
           </ProtectedRoute>
         }
       />

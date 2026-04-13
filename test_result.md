@@ -97,7 +97,150 @@
 #====================================================================================================
 
 
+user_problem_statement: "Multiple fixes for US Bakers CRM: 1) NewOrder page crash 2) Delete orders from pending/hold 3) Show all images in manage orders 4) Voice instructions accessible 5) PetPooja sync default filter 6) Phone 10 digit restriction 7) Gender mandatory"
 
-#====================================================================================================
-# Testing Data - Main Agent and testing sub agent both should log testing data below this section
-#====================================================================================================
+backend:
+  - task: "Deleted orders endpoint"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Added GET /api/orders/deleted endpoint and modified DELETE /api/orders/{order_id} to allow outlet_admin direct delete"
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: GET /api/orders/deleted endpoint working correctly. Returns empty list initially, populates with deleted orders after deletion. Proper authentication required. Outlet admins can see their outlet's deleted orders."
+
+  - task: "Delete order - outlet admin direct delete"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Modified delete_order endpoint to allow outlet_admin to delete directly (not just super_admin)"
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: DELETE /api/orders/{order_id} working correctly for both super_admin and outlet_admin roles. Orders are properly marked as deleted (is_deleted: true) with audit trail (deleted_by, delete_approved_by). Deleted orders appear in GET /api/orders/deleted endpoint."
+
+frontend:
+  - task: "NewOrder page crash fix"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/NewOrder.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "Fixed React.useRef to useRef import. Page loads correctly now."
+
+  - task: "Phone number 10 digit restriction"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/NewOrder.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "Added maxLength=10, regex to strip non-digits, validation message"
+
+  - task: "Gender mandatory"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/NewOrder.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "Made gender required with validation in submit and red border + error message"
+
+  - task: "Deleted Orders page and sidebar"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/DeletedOrders.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "Created DeletedOrders.js page, added route in App.js, added sidebar link"
+
+  - task: "Delete button on Pending Orders"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/PendingOrders.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "Added delete button for super_admin and outlet_admin on pending order cards"
+
+  - task: "ManageOrders show all images"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/ManageOrders.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "Image column now shows primary, secondary, and actual cake photos. Preview dialog has gallery thumbnails."
+
+  - task: "Voice instructions in ManageOrders"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/ManageOrders.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "Added voice instruction audio player in order details dialog. Mic icon indicator on order number."
+
+  - task: "PetPooja Sync default synced filter"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/PetPoojaSync.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "Default filter shows synced only. Toggle buttons for Synced Only / View All."
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 2
+  run_ui: false
+
+test_plan:
+  current_focus: []
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    - agent: "main"
+      message: "Implemented all 7 fixes. Backend has new GET /api/orders/deleted endpoint and modified DELETE endpoint. Please test: 1) GET /api/orders/deleted returns empty list initially 2) DELETE /api/orders/{id} works for outlet_admin role. Auth: admin@usbakers.com/admin123"
+    - agent: "testing"
+      message: "✅ BACKEND TESTING COMPLETE: All backend functionality tested and working correctly. GET /api/orders/deleted endpoint returns proper list (empty initially, populated after deletion). DELETE /api/orders/{order_id} works for both super_admin and outlet_admin roles with direct deletion capability. Authentication working with admin@usbakers.com/admin123. Orders properly marked as deleted with audit trail. Created comprehensive test suite (backend_test.py, specific_test.py, outlet_admin_test.py) - all tests passing 100%."

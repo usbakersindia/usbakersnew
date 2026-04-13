@@ -4,7 +4,7 @@ import LayoutWithSidebar from '../components/LayoutWithSidebar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Clock, DollarSign, User, MapPin, CreditCard } from 'lucide-react';
+import { Clock, DollarSign, User, MapPin, CreditCard, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -48,6 +48,25 @@ const PendingOrders = () => {
     }
   };
   
+  const deleteOrder = async (orderId, orderNumber) => {
+    if (!window.confirm(`Are you sure you want to delete order ${orderNumber}? This action will move it to Deleted Orders.`)) {
+      return;
+    }
+    
+    try {
+      const token = localStorage.getItem('token');
+      await axios.delete(`${API}/orders/${orderId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      fetchPendingOrders();
+      alert('Order deleted successfully!');
+    } catch (error) {
+      console.error('Failed to delete order:', error);
+      alert(error.response?.data?.detail || 'Failed to delete order');
+    }
+  };
+
+
   const markAsCredit = async (orderId) => {
     if (!window.confirm('Mark this order as Credit Order? It will bypass payment threshold.')) {
       return;
@@ -238,6 +257,19 @@ const PendingOrders = () => {
                       >
                         <CreditCard className="h-4 w-4 mr-2" />
                         Mark as Credit Order
+                      </Button>
+                    )}
+                    
+                    {/* Delete Button - Super Admin and Outlet Admin */}
+                    {(user?.role === 'super_admin' || user?.role === 'outlet_admin') && (
+                      <Button
+                        onClick={() => deleteOrder(order.id, order.order_number)}
+                        variant="outline"
+                        className="w-full border-red-300 text-red-600 hover:bg-red-50 mt-2"
+                        size="sm"
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete Order
                       </Button>
                     )}
                   </CardContent>

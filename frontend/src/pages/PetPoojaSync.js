@@ -17,6 +17,7 @@ const PetPoojaSync = () => {
   const [syncing, setSyncing] = useState(null);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
+  const [filter, setFilter] = useState('synced'); // 'synced' by default, 'all' to show all
 
   useEffect(() => {
     fetchBills();
@@ -55,6 +56,11 @@ const PetPoojaSync = () => {
       setSyncing(null);
     }
   };
+  const filteredBills = filter === 'synced' 
+    ? bills.filter(bill => bill.synced_to_order) 
+    : bills;
+
+
 
   const getSyncStatus = (bill) => {
     if (bill.synced_to_order) {
@@ -154,16 +160,44 @@ const PetPoojaSync = () => {
         {/* Bills Table */}
         <Card>
           <CardHeader>
-            <CardTitle>
-              All PetPooja Bills ({bills.length})
-            </CardTitle>
+            <div className="flex justify-between items-center">
+              <CardTitle>
+                {filter === 'synced' ? 'Successfully Synced Bills' : 'All PetPooja Bills'} ({filteredBills.length})
+              </CardTitle>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant={filter === 'synced' ? 'default' : 'outline'}
+                  onClick={() => setFilter('synced')}
+                  className={filter === 'synced' ? 'text-white' : 'border-pink-600 text-pink-600'}
+                  style={filter === 'synced' ? { backgroundColor: '#e92587' } : {}}
+                >
+                  <CheckCircle className="mr-1 h-3 w-3" />
+                  Synced Only
+                </Button>
+                <Button
+                  size="sm"
+                  variant={filter === 'all' ? 'default' : 'outline'}
+                  onClick={() => setFilter('all')}
+                  className={filter === 'all' ? 'text-white' : 'text-gray-600'}
+                  style={filter === 'all' ? { backgroundColor: '#6b7280' } : {}}
+                >
+                  View All
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
-            {bills.length === 0 ? (
+            {filteredBills.length === 0 ? (
               <div className="text-center py-12">
-                <p className="text-gray-500">No PetPooja bills found</p>
+                <p className="text-gray-500">
+                  {filter === 'synced' ? 'No synced bills found' : 'No PetPooja bills found'}
+                </p>
                 <p className="text-sm text-gray-400 mt-2">
-                  Bills will appear here when synced from PetPooja POS
+                  {filter === 'synced' 
+                    ? 'Click "View All" to see all bills including pending ones'
+                    : 'Bills will appear here when synced from PetPooja POS'
+                  }
                 </p>
               </div>
             ) : (
@@ -180,7 +214,7 @@ const PetPoojaSync = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {bills.map((bill) => (
+                  {filteredBills.map((bill) => (
                     <TableRow key={bill.id}>
                       <TableCell className="font-medium">{bill.bill_number}</TableCell>
                       <TableCell>

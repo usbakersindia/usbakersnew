@@ -2,7 +2,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { LayoutDashboard, ShoppingCart, Clock, Store, Users, MapPin, Settings, LogOut, Menu, X, MessageSquare, List, Receipt, Truck, CreditCard, RefreshCw, Navigation, TrendingUp, Webhook, Wallet, ImageIcon, Factory } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Clock, Store, Users, MapPin, Settings, LogOut, Menu, X, MessageSquare, List, Receipt, Truck, CreditCard, RefreshCw, Navigation, TrendingUp, Webhook, Wallet, ImageIcon, Factory, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 const Sidebar = () => {
@@ -23,6 +23,7 @@ const Sidebar = () => {
         { path: '/new-order', label: 'New Order', icon: ShoppingCart, testId: 'nav-new-order' },
         { path: '/pending-orders', label: 'Pending Orders', icon: Clock, testId: 'nav-pending-orders' },
         { path: '/hold-orders', label: 'Hold Orders', icon: Clock, testId: 'nav-hold-orders' },
+        { path: '/deleted-orders', label: 'Deleted Orders', icon: Trash2, testId: 'nav-deleted-orders' },
         { path: '/manage-orders', label: 'Manage Orders', icon: List, testId: 'nav-manage-orders' },
         { path: '/credit-orders', label: 'Credit Orders', icon: CreditCard, testId: 'nav-credit-orders' },
         { path: '/payments', label: 'Payments', icon: Wallet, testId: 'nav-payments' },
@@ -64,6 +65,7 @@ const Sidebar = () => {
               { path: '/new-order', label: 'New Order', icon: ShoppingCart, testId: 'nav-new-order' },
               { path: '/pending-orders', label: 'Pending Orders', icon: Clock, testId: 'nav-pending-orders' },
               { path: '/hold-orders', label: 'Hold Orders', icon: Clock, testId: 'nav-hold-orders' },
+              { path: '/deleted-orders', label: 'Deleted Orders', icon: Trash2, testId: 'nav-deleted-orders' },
               { path: '/manage-orders', label: 'Manage Orders', icon: List, testId: 'nav-manage-orders' },
         { path: '/credit-orders', label: 'Credit Orders', icon: CreditCard, testId: 'nav-credit-orders' },
               { path: '/payments', label: 'Payments', icon: Wallet, testId: 'nav-payments' },
