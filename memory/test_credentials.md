@@ -1,25 +1,12 @@
 # Test Credentials
 
-## Super Admin
+## Admin Login
 - Email: admin@usbakers.com
 - Password: admin123
 
-## Kitchen Staff
-- Email: kitchen@usbakers.com
-- Password: kitchen123
-
-## Outlet Admin (Branch/Counter)
-- Email: outlet@usbakers.com
-- Password: outlet123
-
-## Order Manager
-- Email: manager@usbakers.com
-- Password: manager123
-
-## Factory Manager
-- Email: factory@usbakers.com
-- Password: factory123
-
-## Delivery Person
-- Email: delivery@usbakers.com
-- Password: delivery123
+## Other Roles
+- Kitchen: kitchen@usbakers.com / kitchen123
+- Outlet: outlet@usbakers.com / outlet123
+- Manager: manager@usbakers.com / manager123
+- Delivery: delivery@usbakers.com / delivery123
+- Factory: factory@usbakers.com / factory123
