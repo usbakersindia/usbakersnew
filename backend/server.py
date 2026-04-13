@@ -3374,21 +3374,51 @@ async def handle_petpooja_standard_format(request_data: Dict[str, Any]):
             # Found match - sync payment
             order = matching_orders[0]
             
-            # Record payment
-            payment = Payment(
-                order_id=order['id'],
-                amount=total_amount,
-                payment_method=custom_payment_type or payment_type,
-                petpooja_bill_number=petpooja_order_id,
-                recorded_by="system"
-            )
+            # Check if a payment with this bill number already exists (bill edit scenario)
+            existing_payment = None
+            if petpooja_order_id:
+                existing_payment = await db.payments.find_one(
+                    {"petpooja_bill_number": petpooja_order_id, "order_id": order['id']},
+                    {"_id": 0}
+                )
             
-            payment_doc = payment.model_dump()
-            payment_doc['paid_at'] = payment_doc['paid_at'].isoformat()
-            await db.payments.insert_one(payment_doc)
-            
-            # Update order with threshold check
-            new_paid_amount = order.get('paid_amount', 0) + total_amount
+            if existing_payment:
+                # Bill was EDITED in PetPooja - update existing payment
+                old_amount = existing_payment.get('amount', 0)
+                amount_diff = total_amount - old_amount
+                
+                await db.payments.update_one(
+                    {"id": existing_payment['id']},
+                    {"$set": {
+                        "amount": total_amount,
+                        "payment_method": custom_payment_type or payment_type,
+                        "paid_at": datetime.now(timezone.utc).isoformat(),
+                        "updated_from_petpooja": True
+                    }}
+                )
+                logger.info(f"Updated existing payment {existing_payment['id']} from {old_amount} to {total_amount} (diff: {amount_diff})")
+                
+                # Recalculate total paid from all payments for this order
+                all_payments = await db.payments.find(
+                    {"order_id": order['id']},
+                    {"_id": 0, "amount": 1}
+                ).to_list(100)
+                new_paid_amount = sum(p.get('amount', 0) for p in all_payments)
+            else:
+                # New payment - create fresh record
+                payment = Payment(
+                    order_id=order['id'],
+                    amount=total_amount,
+                    payment_method=custom_payment_type or payment_type,
+                    petpooja_bill_number=petpooja_order_id,
+                    recorded_by="system"
+                )
+                
+                payment_doc = payment.model_dump()
+                payment_doc['paid_at'] = payment_doc['paid_at'].isoformat()
+                await db.payments.insert_one(payment_doc)
+                
+                new_paid_amount = order.get('paid_amount', 0) + total_amount
             
             # Get branch-specific threshold first, then fall back to global
             outlet_id = order.get('outlet_id')
@@ -3478,7 +3508,7 @@ async def handle_petpooja_payment(request_data: Dict[str, Any]):
         # Extract our Order ID from comment (format: USB-20250305-001)
         order_id = comment.strip()
         
-        # Store the bill in petpooja_bills collection for tracking
+        # Store/update the bill in petpooja_bills collection for tracking
         bill_doc = {
             "id": f"bill-{str(uuid4())[:8]}",
             "bill_number": bill_number,
@@ -3490,6 +3520,16 @@ async def handle_petpooja_payment(request_data: Dict[str, Any]):
             "sync_error": None,
             "created_at": datetime.now(timezone.utc).isoformat()
         }
+        
+        # Upsert: update if bill_number exists, insert if new
+        if bill_number:
+            await db.petpooja_bills.update_one(
+                {"bill_number": bill_number},
+                {"$set": bill_doc},
+                upsert=True
+            )
+        else:
+            await db.petpooja_bills.insert_one(bill_doc)
         
         # Find order in our system by order_number or id
         order = await db.orders.find_one({
@@ -3512,21 +3552,48 @@ async def handle_petpooja_payment(request_data: Dict[str, Any]):
             await db.petpooja_bills.insert_one(bill_doc)
             return {"success": False, "message": "Order is on hold"}
         
-        # Record payment
-        payment = Payment(
-            order_id=order['id'],
-            amount=amount,
-            payment_method=payment_method,
-            petpooja_bill_number=bill_number,
-            recorded_by="system"  # Auto-recorded from PetPooja
-        )
+        # Check if payment with this bill number already exists (bill edit scenario)
+        existing_payment = None
+        if bill_number:
+            existing_payment = await db.payments.find_one(
+                {"petpooja_bill_number": bill_number, "order_id": order['id']},
+                {"_id": 0}
+            )
         
-        payment_doc = payment.model_dump()
-        payment_doc['paid_at'] = payment_doc['paid_at'].isoformat()
-        await db.payments.insert_one(payment_doc)
-        
-        # Update order
-        new_paid_amount = order.get('paid_amount', 0) + amount
+        if existing_payment:
+            # Bill was EDITED in PetPooja - update existing payment
+            old_amount = existing_payment.get('amount', 0)
+            await db.payments.update_one(
+                {"id": existing_payment['id']},
+                {"$set": {
+                    "amount": amount,
+                    "payment_method": payment_method,
+                    "paid_at": datetime.now(timezone.utc).isoformat(),
+                    "updated_from_petpooja": True
+                }}
+            )
+            logger.info(f"Updated existing payment {existing_payment['id']} from {old_amount} to {amount}")
+            
+            # Recalculate total paid from all payments
+            all_payments = await db.payments.find(
+                {"order_id": order['id']},
+                {"_id": 0, "amount": 1}
+            ).to_list(100)
+            new_paid_amount = sum(p.get('amount', 0) for p in all_payments)
+        else:
+            # New payment - create fresh record
+            payment = Payment(
+                order_id=order['id'],
+                amount=amount,
+                payment_method=payment_method,
+                petpooja_bill_number=bill_number,
+                recorded_by="system"
+            )
+            
+            payment_doc = payment.model_dump()
+            payment_doc['paid_at'] = payment_doc['paid_at'].isoformat()
+            await db.payments.insert_one(payment_doc)
+            new_paid_amount = order.get('paid_amount', 0) + amount
         new_pending = order.get('total_amount', 0) - new_paid_amount
         
         bill_numbers = order.get('petpooja_bill_numbers', [])
@@ -3572,7 +3639,6 @@ async def handle_petpooja_payment(request_data: Dict[str, Any]):
             "petpooja_comment": comment,
             "lifecycle_status": new_lifecycle_status,
             "status": new_status,
-            "is_hold": False,
             "updated_at": datetime.now(timezone.utc).isoformat()
         }
         

@@ -27,6 +27,7 @@ const NewOrder = () => {
   const [occasions, setOccasions] = useState([]);
   const [timeSlots, setTimeSlots] = useState([]);
   const [loading, setLoading] = useState(false);
+  const submittingRef = React.useRef(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -257,8 +258,9 @@ const NewOrder = () => {
   const handleSubmit = async (e, isPunchOrder = false) => {
     e.preventDefault();
     
-    // Prevent double submission
-    if (loading) return;
+    // Prevent double submission (sync check via ref)
+    if (submittingRef.current || loading) return;
+    submittingRef.current = true;
     
     // Validate for punch orders
     if (isPunchOrder) {
@@ -312,6 +314,7 @@ const NewOrder = () => {
       }
     } catch (error) {
       setError(error.response?.data?.detail || 'Failed to create order');
+      submittingRef.current = false;
     } finally {
       setLoading(false);
     }
