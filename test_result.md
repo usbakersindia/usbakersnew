@@ -130,6 +130,22 @@ backend:
           agent: "testing"
           comment: "✅ TESTED: DELETE /api/orders/{order_id} working correctly for both super_admin and outlet_admin roles. Orders are properly marked as deleted (is_deleted: true) with audit trail (deleted_by, delete_approved_by). Deleted orders appear in GET /api/orders/deleted endpoint."
 
+  - task: "Branch-specific threshold in release hold order"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Fixed /orders/{order_id}/release to check branch-specific threshold first then global. Was only using global threshold causing conflict."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: Branch-specific threshold functionality working correctly. Set 10% threshold for outlet, created hold orders, released and recorded payments. Order with 10% payment (₹100/₹1000) correctly moved to 'active' status. Order with 5% payment (₹50/₹1000) correctly stayed in 'pending_payment'. Branch threshold (10%) properly overrides global threshold (20%). Payment recording endpoint (/api/payments) correctly implements branch-specific logic."
+
+
 frontend:
   - task: "NewOrder page crash fix"
     implemented: true
@@ -244,3 +260,5 @@ agent_communication:
       message: "Implemented all 7 fixes. Backend has new GET /api/orders/deleted endpoint and modified DELETE endpoint. Please test: 1) GET /api/orders/deleted returns empty list initially 2) DELETE /api/orders/{id} works for outlet_admin role. Auth: admin@usbakers.com/admin123"
     - agent: "testing"
       message: "✅ BACKEND TESTING COMPLETE: All backend functionality tested and working correctly. GET /api/orders/deleted endpoint returns proper list (empty initially, populated after deletion). DELETE /api/orders/{order_id} works for both super_admin and outlet_admin roles with direct deletion capability. Authentication working with admin@usbakers.com/admin123. Orders properly marked as deleted with audit trail. Created comprehensive test suite (backend_test.py, specific_test.py, outlet_admin_test.py) - all tests passing 100%."
+    - agent: "testing"
+      message: "✅ BRANCH THRESHOLD TESTING COMPLETE: Branch-specific threshold functionality working correctly. Tested complete workflow: 1) Set branch threshold (10%) via POST /api/branch-payment-threshold 2) Created hold orders 3) Released orders and recorded payments via POST /api/payments 4) Verified orders with ≥10% payment move to 'active' status 5) Verified orders with <10% payment stay in 'pending_payment' 6) Confirmed branch threshold (10%) properly overrides global threshold (20%). All 14 test cases passed 100%."

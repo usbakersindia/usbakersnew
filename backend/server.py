@@ -1824,9 +1824,20 @@ async def release_hold_order(
     if order.get('lifecycle_status') != 'hold':
         raise HTTPException(status_code=400, detail="Order is not on hold")
     
-    # Get system settings for payment threshold
-    settings = await db.system_settings.find_one({"id": "system_settings"}, {"_id": 0})
-    min_percentage = settings.get('minimum_payment_percentage', 20.0) if settings else 20.0
+    # Get branch-specific threshold first, then fall back to global
+    outlet_id = order.get('outlet_id')
+    min_percentage = 20.0  # Default
+    if outlet_id:
+        branch_threshold = await db.branch_payment_thresholds.find_one({"outlet_id": outlet_id}, {"_id": 0})
+        if branch_threshold:
+            min_percentage = branch_threshold.get('minimum_payment_percentage', 20.0)
+        else:
+            settings = await db.system_settings.find_one({"id": "system_settings"}, {"_id": 0})
+            if settings:
+                min_percentage = settings.get('minimum_payment_percentage', 20.0)
+    else:
+        settings = await db.system_settings.find_one({"id": "system_settings"}, {"_id": 0})
+        min_percentage = settings.get('minimum_payment_percentage', 20.0) if settings else 20.0
     
     # Update order with completed info
     update_data = order_updates.copy()
