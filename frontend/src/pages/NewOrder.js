@@ -84,6 +84,9 @@ const NewOrder = () => {
     fetchTimeSlots();
     if (user?.outlet_id) {
       fetchSalesPersons(user.outlet_id);
+    } else {
+      // Super admin: fetch all sales persons initially
+      fetchSalesPersons(null);
     }
   }, [user]);
 
