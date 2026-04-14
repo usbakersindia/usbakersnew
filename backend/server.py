@@ -1665,6 +1665,48 @@ async def create_order(
     current_user: User = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.OUTLET_ADMIN, UserRole.ORDER_MANAGER, UserRole.FACTORY_MANAGER]))
 ):
     """Create a new order (punch or hold) - Only for admins and order managers"""
+    # Validate delivery date/time is not in the past
+    if order_data.delivery_date and order_data.delivery_time:
+        try:
+            # Parse delivery_time - handle both "HH:MM" and "HH:MM AM/PM" formats
+            delivery_time_str = order_data.delivery_time.strip()
+            delivery_date_str = order_data.delivery_date.strip()
+            
+            # Try 24h format first (HH:MM)
+            try:
+                delivery_dt = datetime.strptime(f"{delivery_date_str} {delivery_time_str}", "%Y-%m-%d %H:%M")
+            except ValueError:
+                # Try 12h format (HH:MM AM/PM)
+                try:
+                    delivery_dt = datetime.strptime(f"{delivery_date_str} {delivery_time_str}", "%Y-%m-%d %I:%M %p")
+                except ValueError:
+                    delivery_dt = None
+            
+            if delivery_dt:
+                now = datetime.now()
+                if delivery_dt <= now:
+                    raise HTTPException(
+                        status_code=400, 
+                        detail="Delivery date and time cannot be in the past. Please select a future date/time."
+                    )
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.warning(f"Could not validate delivery date/time: {e}")
+    elif order_data.delivery_date:
+        try:
+            delivery_date = datetime.strptime(order_data.delivery_date.strip(), "%Y-%m-%d").date()
+            today = datetime.now().date()
+            if delivery_date < today:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Delivery date cannot be in the past."
+                )
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.warning(f"Could not validate delivery date: {e}")
+    
     # Validate outlet exists
     outlet = await db.outlets.find_one({"id": order_data.outlet_id}, {"_id": 0})
     if not outlet:

@@ -308,6 +308,28 @@ const NewOrder = () => {
       return;
     }
 
+    // Validate delivery date/time is not in the past
+    if (formData.delivery_date && formData.delivery_time) {
+      const now = new Date();
+      const [hours, minutes] = formData.delivery_time.split(':').map(Number);
+      const deliveryDateTime = new Date(formData.delivery_date + 'T00:00:00');
+      deliveryDateTime.setHours(hours, minutes, 0, 0);
+      if (deliveryDateTime <= now) {
+        setError('Delivery date and time cannot be in the past. Please select a future date/time.');
+        setLoading(false);
+        submittingRef.current = false;
+        return;
+      }
+    } else if (formData.delivery_date) {
+      const today = new Date().toISOString().split('T')[0];
+      if (formData.delivery_date < today) {
+        setError('Delivery date cannot be in the past.');
+        setLoading(false);
+        submittingRef.current = false;
+        return;
+      }
+    }
+
     // Validate
     if (!formData.cake_image_url) {
       setError('Cake image is mandatory');
@@ -825,8 +847,18 @@ const NewOrder = () => {
                   <Input
                     required
                     type="date"
+                    min={new Date().toISOString().split('T')[0]}
                     value={formData.delivery_date}
-                    onChange={(e) => setFormData({ ...formData, delivery_date: e.target.value })}
+                    onChange={(e) => {
+                      const selectedDate = e.target.value;
+                      const today = new Date().toISOString().split('T')[0];
+                      if (selectedDate < today) {
+                        setError('Delivery date cannot be in the past');
+                        return;
+                      }
+                      setError('');
+                      setFormData({ ...formData, delivery_date: selectedDate });
+                    }}
                     data-testid="delivery-date-input"
                   />
                 </div>
@@ -836,10 +868,29 @@ const NewOrder = () => {
                     type="time"
                     required
                     value={formData.delivery_time}
-                    onChange={(e) => setFormData({ ...formData, delivery_time: e.target.value })}
+                    onChange={(e) => {
+                      const selectedTime = e.target.value;
+                      // If delivery date is today, check if time is in the past
+                      const today = new Date().toISOString().split('T')[0];
+                      if (formData.delivery_date === today && selectedTime) {
+                        const now = new Date();
+                        const [hours, minutes] = selectedTime.split(':').map(Number);
+                        const selectedDateTime = new Date();
+                        selectedDateTime.setHours(hours, minutes, 0, 0);
+                        if (selectedDateTime <= now) {
+                          setError('Delivery time cannot be in the past');
+                          return;
+                        }
+                      }
+                      setError('');
+                      setFormData({ ...formData, delivery_time: selectedTime });
+                    }}
                     data-testid="delivery-time-input"
                     className="w-full"
                   />
+                  {formData.delivery_date === new Date().toISOString().split('T')[0] && (
+                    <p className="text-xs text-amber-600 mt-1">⚠ Today's date selected — time must be in the future</p>
+                  )}
                 </div>
               </div>
             </CardContent>
