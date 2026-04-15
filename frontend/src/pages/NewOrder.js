@@ -870,27 +870,12 @@ const NewOrder = () => {
                     value={formData.delivery_time}
                     onChange={(e) => {
                       const selectedTime = e.target.value;
-                      // If delivery date is today, check if time is in the past
-                      const today = new Date().toISOString().split('T')[0];
-                      if (formData.delivery_date === today && selectedTime) {
-                        const now = new Date();
-                        const [hours, minutes] = selectedTime.split(':').map(Number);
-                        const selectedDateTime = new Date();
-                        selectedDateTime.setHours(hours, minutes, 0, 0);
-                        if (selectedDateTime <= now) {
-                          setError('Delivery time cannot be in the past');
-                          return;
-                        }
-                      }
                       setError('');
                       setFormData({ ...formData, delivery_time: selectedTime });
                     }}
                     data-testid="delivery-time-input"
                     className="w-full"
                   />
-                  {formData.delivery_date === new Date().toISOString().split('T')[0] && (
-                    <p className="text-xs text-amber-600 mt-1">⚠ Today's date selected — time must be in the future</p>
-                  )}
                 </div>
               </div>
             </CardContent>

@@ -1715,10 +1715,14 @@ async def create_order(
     # Calculate delivery charge if needed
     delivery_charge = 0.0
     if order_data.needs_delivery and order_data.zone_id:
-        zone = await db.zones.find_one({"id": order_data.zone_id}, {"_id": 0})
-        if not zone:
-            raise HTTPException(status_code=404, detail="Zone not found")
-        delivery_charge = zone.get('delivery_charge', 0.0)
+        if order_data.zone_id != 'custom':
+            zone = await db.zones.find_one({"id": order_data.zone_id}, {"_id": 0})
+            if not zone:
+                raise HTTPException(status_code=404, detail="Zone not found. Please create zones first in Zone Management.")
+            delivery_charge = zone.get('delivery_charge', 0.0)
+        else:
+            # Custom zone - delivery charge handled separately
+            delivery_charge = order_data.custom_delivery_charge if hasattr(order_data, 'custom_delivery_charge') else 0.0
     
     # Calculate total amount (cake + delivery)
     total_amount = order_data.total_amount + delivery_charge
@@ -3376,15 +3380,24 @@ async def handle_petpooja_standard_format(request_data: Dict[str, Any]):
             if any(keyword in item_name for keyword in ['cake', 'pastry', 'pasteries', 'forest', 'truffle', 'custom']) or \
                any(keyword in category for keyword in ['cake', 'pastry', 'pasteries', 'pastries', 'custom']):
                 has_custom_cake = True
-                item_total = float(item.get('total', 0) or item.get('price', 0))
+                # Use item total INCLUDING tax (total + tax fields)
+                item_base = float(item.get('total', 0) or item.get('price', 0))
+                item_tax = float(item.get('tax', 0) or 0) + float(item.get('tax_amount', 0) or 0)
+                # Also check for itemtax, item_tax, gst etc
+                if item_tax == 0:
+                    item_tax = float(item.get('itemtax', 0) or 0) + float(item.get('item_tax', 0) or 0) + float(item.get('gst', 0) or 0)
+                item_total_with_tax = item_base + item_tax
+                
                 custom_cake_details.append({
                     "name": item.get('name', ''),
                     "category": item.get('category_name', ''),
                     "quantity": item.get('quantity', 1),
                     "price": item.get('price', 0),
-                    "total": item_total
+                    "total_before_tax": item_base,
+                    "tax": item_tax,
+                    "total": item_total_with_tax
                 })
-                cake_only_amount += item_total
+                cake_only_amount += item_total_with_tax
         
         # Use cake-only amount for syncing, not full bill total
         sync_amount = cake_only_amount if has_custom_cake else total_amount
