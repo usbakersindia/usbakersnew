@@ -160,7 +160,7 @@ const UserManagement = () => {
     return colors[role] || 'bg-gray-100 text-gray-800';
   };
 
-  const roleRequiresOutlet = ['outlet_admin', 'order_manager', 'kitchen'].includes(formData.role);
+  const roleRequiresOutlet = ['outlet_admin', 'order_manager', 'kitchen', 'delivery', 'accounts'].includes(formData.role);
 
   if (loading) {
     return (
@@ -258,15 +258,16 @@ const UserManagement = () => {
 
                 {roleRequiresOutlet && (
                   <div className="space-y-2">
-                    <Label htmlFor="outlet">Outlet *</Label>
+                    <Label htmlFor="outlet" className="text-base font-semibold">Outlet * <span className="text-red-500">(Required)</span></Label>
                     <Select
                       value={formData.outlet_id || ''}
-                      onValueChange={(value) => setFormData({ ...formData, outlet_id: value })}
+                      onValueChange={(value) => setFormData({ ...formData, outlet_id: value === 'all' ? null : value })}
                     >
-                      <SelectTrigger data-testid="user-outlet-select">
-                        <SelectValue placeholder="Select outlet" />
+                      <SelectTrigger data-testid="user-outlet-select" className={!formData.outlet_id ? 'border-red-300 bg-red-50' : 'border-green-300'}>
+                        <SelectValue placeholder="⚠ Please select an outlet" />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="all">All Outlets</SelectItem>
                         {outlets.map((outlet) => (
                           <SelectItem key={outlet.id} value={outlet.id}>
                             {outlet.name}
@@ -274,6 +275,9 @@ const UserManagement = () => {
                         ))}
                       </SelectContent>
                     </Select>
+                    {!formData.outlet_id && (
+                      <p className="text-xs text-red-500">Please select an outlet or "All Outlets"</p>
+                    )}
                   </div>
                 )}
 

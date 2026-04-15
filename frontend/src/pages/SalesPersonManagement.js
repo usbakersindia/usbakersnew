@@ -215,14 +215,14 @@ const SalesPersonManagement = () => {
                 />
               </div>
               <div>
-                <Label>Outlet *</Label>
+                <Label className="text-base font-semibold">Outlet * <span className="text-red-500">(Required)</span></Label>
                 <Select
                   value={formData.outlet_id}
                   onValueChange={(value) => setFormData({ ...formData, outlet_id: value })}
                   required
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select outlet" />
+                  <SelectTrigger className={!formData.outlet_id ? 'border-red-300 bg-red-50' : 'border-green-300'}>
+                    <SelectValue placeholder="⚠ Please select an outlet" />
                   </SelectTrigger>
                   <SelectContent>
                     {outlets.map(outlet => (
@@ -232,6 +232,9 @@ const SalesPersonManagement = () => {
                     ))}
                   </SelectContent>
                 </Select>
+                {!formData.outlet_id && (
+                  <p className="text-xs text-red-500 mt-1">Please select an outlet</p>
+                )}
               </div>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setShowAddModal(false)}>

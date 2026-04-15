@@ -192,13 +192,13 @@ const ZoneManagement = () => {
                 )}
 
                 <div className="space-y-2">
-                  <Label htmlFor="outlet">Outlet *</Label>
+                  <Label htmlFor="outlet" className="text-base font-semibold">Outlet * <span className="text-red-500">(Required)</span></Label>
                   <Select
                     value={formData.outlet_id}
                     onValueChange={(value) => setFormData({ ...formData, outlet_id: value })}
                   >
-                    <SelectTrigger data-testid="zone-outlet-select">
-                      <SelectValue placeholder="Select outlet" />
+                    <SelectTrigger data-testid="zone-outlet-select" className={!formData.outlet_id ? 'border-red-300 bg-red-50' : 'border-green-300'}>
+                      <SelectValue placeholder="⚠ Please select an outlet first" />
                     </SelectTrigger>
                     <SelectContent>
                       {outlets.map((outlet) => (
@@ -208,6 +208,9 @@ const ZoneManagement = () => {
                       ))}
                     </SelectContent>
                   </Select>
+                  {!formData.outlet_id && (
+                    <p className="text-xs text-red-500">Please select an outlet for this zone</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">

@@ -2043,6 +2043,13 @@ async def update_order(
         if field in update_data:
             update_fields[field] = update_data[field]
     
+    # Recalculate pending_amount when total_amount changes
+    if 'total_amount' in update_data:
+        new_total = float(update_data['total_amount'])
+        paid_amount = order.get('paid_amount', 0)
+        update_fields['pending_amount'] = new_total - paid_amount
+        logger.info(f"Order {order_id}: total changed to {new_total}, paid={paid_amount}, pending={new_total - paid_amount}")
+    
     await db.orders.update_one({"id": order_id}, {"$set": update_fields})
     
     # Log the update
@@ -3356,25 +3363,32 @@ async def handle_petpooja_standard_format(request_data: Dict[str, Any]):
         
         logger.info(f"PetPooja Order: {petpooja_order_id}, Customer: {customer_phone}, Amount: {total_amount}")
         
-        # Check if order contains cake items
+        # Check if order contains cake items and calculate cake-only amount
         has_custom_cake = False
         custom_cake_details = []
+        cake_only_amount = 0.0
         
         for item in order_items:
             item_name = str(item.get('name', '')).lower()
             category = str(item.get('category_name', '')).lower()
             
             # Check if item is a cake/pastry (including category check)
-            if any(keyword in item_name for keyword in ['cake', 'pastry', 'pasteries', 'forest', 'truffle']) or \
-               any(keyword in category for keyword in ['cake', 'pastry', 'pasteries', 'pastries']):
+            if any(keyword in item_name for keyword in ['cake', 'pastry', 'pasteries', 'forest', 'truffle', 'custom']) or \
+               any(keyword in category for keyword in ['cake', 'pastry', 'pasteries', 'pastries', 'custom']):
                 has_custom_cake = True
+                item_total = float(item.get('total', 0) or item.get('price', 0))
                 custom_cake_details.append({
                     "name": item.get('name', ''),
                     "category": item.get('category_name', ''),
                     "quantity": item.get('quantity', 1),
                     "price": item.get('price', 0),
-                    "total": item.get('total', 0)
+                    "total": item_total
                 })
+                cake_only_amount += item_total
+        
+        # Use cake-only amount for syncing, not full bill total
+        sync_amount = cake_only_amount if has_custom_cake else total_amount
+        logger.info(f"PetPooja bill total: {total_amount}, cake-only amount: {cake_only_amount}, sync amount: {sync_amount}")
         
         # Store bill in petpooja_bills collection
         bill_doc = {
@@ -3382,6 +3396,7 @@ async def handle_petpooja_standard_format(request_data: Dict[str, Any]):
             "bill_number": petpooja_order_id,
             "bill_data": request_data,
             "amount": total_amount,
+            "cake_only_amount": cake_only_amount,
             "order_number": None,  # Will try to match
             "payment_method": custom_payment_type or payment_type,
             "synced_to_order": False,
@@ -3397,10 +3412,55 @@ async def handle_petpooja_standard_format(request_data: Dict[str, Any]):
             "petpooja_created_on": created_on
         }
         
+        # Handle cancelled/deleted orders from PetPooja
+        petpooja_status = str(order_data.get('status', '')).lower()
+        if petpooja_status in ['cancelled', 'canceled', 'deleted', 'removed']:
+            # Find and reverse any synced payment for this bill
+            existing_payment = await db.payments.find_one(
+                {"petpooja_bill_number": petpooja_order_id},
+                {"_id": 0}
+            )
+            if existing_payment:
+                order_for_reversal = await db.orders.find_one({"id": existing_payment['order_id']}, {"_id": 0})
+                if order_for_reversal:
+                    # Remove the payment
+                    await db.payments.delete_one({"id": existing_payment['id']})
+                    
+                    # Recalculate paid from remaining payments
+                    remaining_payments = await db.payments.find(
+                        {"order_id": existing_payment['order_id']},
+                        {"_id": 0, "amount": 1}
+                    ).to_list(100)
+                    recalc_paid = sum(p.get('amount', 0) for p in remaining_payments)
+                    
+                    await db.orders.update_one(
+                        {"id": existing_payment['order_id']},
+                        {"$set": {
+                            "paid_amount": recalc_paid,
+                            "pending_amount": order_for_reversal['total_amount'] - recalc_paid,
+                            "updated_at": datetime.now(timezone.utc).isoformat()
+                        }}
+                    )
+                    logger.info(f"Reversed payment for cancelled PetPooja bill {petpooja_order_id}")
+            
+            bill_doc["sync_error"] = f"Bill cancelled in PetPooja (status: {petpooja_status})"
+            bill_doc["is_cancelled"] = True
+            # Upsert bill doc
+            await db.petpooja_bills.update_one(
+                {"bill_number": petpooja_order_id},
+                {"$set": bill_doc},
+                upsert=True
+            )
+            return {"success": True, "message": "Cancelled bill processed - payment reversed"}
+        
         # Only process if it has cake/pastry items
         if not has_custom_cake:
             bill_doc["sync_error"] = "No cake/pastry items found"
-            await db.petpooja_bills.insert_one(bill_doc)
+            await db.petpooja_bills.update_one(
+                {"bill_number": petpooja_order_id},
+                {"$set": bill_doc},
+                upsert=True
+            )
             logger.info(f"PetPooja order {petpooja_order_id} has no cake items - skipped")
             return {"success": True, "message": "Order saved but no cake items found"}
         
@@ -3422,9 +3482,11 @@ async def handle_petpooja_standard_format(request_data: Dict[str, Any]):
                 matching_orders.append(matching_order)
                 logger.info(f"Matched by comment field: {order_id_from_comment}")
         
-        # Strategy 2: Match by phone number (if no comment match)
-        if not matching_orders and customer_phone:
-            # Clean phone number
+        # Strategy 2: Match by phone number (ONLY if comment has order ID failed AND bill has cake items)
+        # This prevents non-cake purchases (cream rolls, coffee) from being matched to cake orders
+        if not matching_orders and customer_phone and has_custom_cake and comment and comment.strip():
+            # Only do phone matching if there was an order ID attempt in comment that didn't match
+            # This prevents random phone matches for walk-in purchases
             clean_phone = customer_phone.replace('+91', '').replace('-', '').replace(' ', '').strip()
             
             if clean_phone and clean_phone != '1111111111':  # Skip dummy phone
@@ -3455,20 +3517,20 @@ async def handle_petpooja_standard_format(request_data: Dict[str, Any]):
                 )
             
             if existing_payment:
-                # Bill was EDITED in PetPooja - update existing payment
+                # Bill was EDITED in PetPooja - update existing payment with cake-only amount
                 old_amount = existing_payment.get('amount', 0)
-                amount_diff = total_amount - old_amount
+                amount_diff = sync_amount - old_amount
                 
                 await db.payments.update_one(
                     {"id": existing_payment['id']},
                     {"$set": {
-                        "amount": total_amount,
+                        "amount": sync_amount,
                         "payment_method": custom_payment_type or payment_type,
                         "paid_at": datetime.now(timezone.utc).isoformat(),
                         "updated_from_petpooja": True
                     }}
                 )
-                logger.info(f"Updated existing payment {existing_payment['id']} from {old_amount} to {total_amount} (diff: {amount_diff})")
+                logger.info(f"Updated existing payment {existing_payment['id']} from {old_amount} to {sync_amount} (diff: {amount_diff})")
                 
                 # Recalculate total paid from all payments for this order
                 all_payments = await db.payments.find(
@@ -3477,10 +3539,10 @@ async def handle_petpooja_standard_format(request_data: Dict[str, Any]):
                 ).to_list(100)
                 new_paid_amount = sum(p.get('amount', 0) for p in all_payments)
             else:
-                # New payment - create fresh record
+                # New payment - create fresh record with cake-only amount
                 payment = Payment(
                     order_id=order['id'],
-                    amount=total_amount,
+                    amount=sync_amount,
                     payment_method=custom_payment_type or payment_type,
                     petpooja_bill_number=petpooja_order_id,
                     recorded_by="system"
@@ -3490,7 +3552,12 @@ async def handle_petpooja_standard_format(request_data: Dict[str, Any]):
                 payment_doc['paid_at'] = payment_doc['paid_at'].isoformat()
                 await db.payments.insert_one(payment_doc)
                 
-                new_paid_amount = order.get('paid_amount', 0) + total_amount
+                # Recalculate from all payments to prevent doubling
+                all_payments = await db.payments.find(
+                    {"order_id": order['id']},
+                    {"_id": 0, "amount": 1}
+                ).to_list(100)
+                new_paid_amount = sum(p.get('amount', 0) for p in all_payments)
             
             # Get branch-specific threshold first, then fall back to global
             outlet_id = order.get('outlet_id')
@@ -3535,7 +3602,11 @@ async def handle_petpooja_standard_format(request_data: Dict[str, Any]):
             
             logger.info(f"PetPooja order {petpooja_order_id} matched to {order['order_number']}")
             
-            await db.petpooja_bills.insert_one(bill_doc)
+            await db.petpooja_bills.update_one(
+                {"bill_number": petpooja_order_id},
+                {"$set": bill_doc},
+                upsert=True
+            )
             
             return {
                 "success": True,
@@ -3546,7 +3617,11 @@ async def handle_petpooja_standard_format(request_data: Dict[str, Any]):
         else:
             # No match found - store for manual review
             bill_doc["sync_error"] = "No matching order found - pending manual review"
-            await db.petpooja_bills.insert_one(bill_doc)
+            await db.petpooja_bills.update_one(
+                {"bill_number": petpooja_order_id},
+                {"$set": bill_doc},
+                upsert=True
+            )
             
             logger.warning(f"PetPooja order {petpooja_order_id} - no matching CRM order found")
             
@@ -3579,6 +3654,28 @@ async def handle_petpooja_payment(request_data: Dict[str, Any]):
         
         # Extract our Order ID from comment (format: USB-20250305-001)
         order_id = comment.strip()
+        
+        # Handle cancelled/deleted status
+        status = str(request_data.get('status', '')).lower()
+        if status in ['cancelled', 'canceled', 'deleted', 'removed']:
+            # Reverse any existing payment for this bill
+            if bill_number:
+                existing_payment = await db.payments.find_one(
+                    {"petpooja_bill_number": bill_number},
+                    {"_id": 0}
+                )
+                if existing_payment:
+                    order_for_reversal = await db.orders.find_one({"id": existing_payment['order_id']}, {"_id": 0})
+                    await db.payments.delete_one({"id": existing_payment['id']})
+                    if order_for_reversal:
+                        remaining = await db.payments.find({"order_id": existing_payment['order_id']}, {"_id": 0, "amount": 1}).to_list(100)
+                        recalc_paid = sum(p.get('amount', 0) for p in remaining)
+                        await db.orders.update_one(
+                            {"id": existing_payment['order_id']},
+                            {"$set": {"paid_amount": recalc_paid, "pending_amount": order_for_reversal['total_amount'] - recalc_paid, "updated_at": datetime.now(timezone.utc).isoformat()}}
+                        )
+                    logger.info(f"Reversed payment for cancelled bill {bill_number}")
+            return {"success": True, "message": "Cancelled bill - payment reversed"}
         
         # Store/update the bill in petpooja_bills collection for tracking
         bill_doc = {
@@ -3614,14 +3711,20 @@ async def handle_petpooja_payment(request_data: Dict[str, Any]):
         if not order:
             logger.error(f"Order not found for ID: {order_id}")
             bill_doc["sync_error"] = f"Order {order_id} not found"
-            await db.petpooja_bills.insert_one(bill_doc)
+            if bill_number:
+                await db.petpooja_bills.update_one({"bill_number": bill_number}, {"$set": bill_doc}, upsert=True)
+            else:
+                await db.petpooja_bills.insert_one(bill_doc)
             return {"success": False, "message": f"Order {order_id} not found"}
         
         # Check if order is on hold
         if order.get('is_hold', False):
             logger.info(f"Order {order_id} is on hold, not syncing payment")
             bill_doc["sync_error"] = "Order is on hold"
-            await db.petpooja_bills.insert_one(bill_doc)
+            if bill_number:
+                await db.petpooja_bills.update_one({"bill_number": bill_number}, {"$set": bill_doc}, upsert=True)
+            else:
+                await db.petpooja_bills.insert_one(bill_doc)
             return {"success": False, "message": "Order is on hold"}
         
         # Check if payment with this bill number already exists (bill edit scenario)
@@ -3665,7 +3768,13 @@ async def handle_petpooja_payment(request_data: Dict[str, Any]):
             payment_doc = payment.model_dump()
             payment_doc['paid_at'] = payment_doc['paid_at'].isoformat()
             await db.payments.insert_one(payment_doc)
-            new_paid_amount = order.get('paid_amount', 0) + amount
+            
+            # Always recalculate from all payments to prevent doubling
+            all_payments = await db.payments.find(
+                {"order_id": order['id']},
+                {"_id": 0, "amount": 1}
+            ).to_list(100)
+            new_paid_amount = sum(p.get('amount', 0) for p in all_payments)
         new_pending = order.get('total_amount', 0) - new_paid_amount
         
         bill_numbers = order.get('petpooja_bill_numbers', [])
@@ -3733,11 +3842,22 @@ async def handle_petpooja_payment(request_data: Dict[str, Any]):
         
         logger.info(f"Payment synced for order {order_id}: ₹{amount}")
         
-        # Mark bill as synced and store in petpooja_bills collection
+        # Mark bill as synced and store in petpooja_bills collection (upsert to prevent duplicates)
         bill_doc["synced_to_order"] = True
         bill_doc["order_id"] = order['id']
         bill_doc["outlet_id"] = order.get('outlet_id')
-        await db.petpooja_bills.insert_one(bill_doc)
+        if bill_number:
+            await db.petpooja_bills.update_one(
+                {"bill_number": bill_number},
+                {"$set": bill_doc},
+                upsert=True
+            )
+        else:
+            await db.petpooja_bills.update_one(
+                {"order_number": order_id, "bill_number": {"$exists": False}},
+                {"$set": bill_doc},
+                upsert=True
+            )
         
         # Send WhatsApp notification for payment confirmation
         try:

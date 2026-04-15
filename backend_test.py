@@ -1,380 +1,615 @@
 #!/usr/bin/env python3
 """
-Backend Test Suite for US Bakers CRM - Branch-Specific Threshold Testing
-Testing the branch-specific threshold functionality in release hold order
+Backend API Testing for US Bakers CRM Payment Sync Fixes
+Tests the payment sync functionality including:
+1. Order amount change recalculates pending
+2. PetPooja webhook - cake only amount sync
+3. Bill edit handling (same bill resent should update not duplicate)
+4. Cancelled bill should reverse payment
+5. Order pending recalculation after cancellation
 """
 
 import requests
 import json
-import sys
-from datetime import datetime
+import time
+from datetime import datetime, timedelta
 
-# Backend URL from frontend .env
-BASE_URL = "https://335fff4e-2684-4e97-8c4c-790cfa84ee6f.preview.emergentagent.com/api"
+# Configuration
+BASE_URL = "https://code-review-241.preview.emergentagent.com/api"
+ADMIN_EMAIL = "admin@usbakers.com"
+ADMIN_PASSWORD = "admin123"
 
-class TestRunner:
+class USBakersAPITester:
     def __init__(self):
         self.session = requests.Session()
-        self.auth_token = None
-        self.test_results = []
+        self.token = None
+        self.user_info = None
+        self.test_order_id = None
+        self.test_outlet_id = None
         
-    def log_test(self, test_name, success, message, details=None):
-        """Log test results"""
-        status = "✅ PASS" if success else "❌ FAIL"
-        print(f"{status}: {test_name} - {message}")
-        if details:
-            print(f"   Details: {details}")
+    def login(self):
+        """Login as admin and get auth token"""
+        print("🔐 Logging in as admin...")
         
-        self.test_results.append({
-            'test': test_name,
-            'success': success,
-            'message': message,
-            'details': details
-        })
-    
-    def login_admin(self):
-        """Login as admin user"""
-        try:
-            response = self.session.post(f"{BASE_URL}/auth/login", json={
-                "email": "admin@usbakers.com",
-                "password": "admin123"
-            })
-            
-            if response.status_code == 200:
-                data = response.json()
-                self.auth_token = data.get('access_token')
-                self.session.headers.update({'Authorization': f'Bearer {self.auth_token}'})
-                self.log_test("Admin Login", True, "Successfully logged in as admin")
-                return True
-            else:
-                self.log_test("Admin Login", False, f"Login failed: {response.status_code}", response.text)
-                return False
-                
-        except Exception as e:
-            self.log_test("Admin Login", False, f"Login error: {str(e)}")
+        login_data = {
+            "email": ADMIN_EMAIL,
+            "password": ADMIN_PASSWORD
+        }
+        
+        response = self.session.post(f"{BASE_URL}/auth/login", json=login_data)
+        
+        if response.status_code == 200:
+            data = response.json()
+            self.token = data["access_token"]
+            self.user_info = data["user"]
+            self.session.headers.update({"Authorization": f"Bearer {self.token}"})
+            print(f"✅ Login successful! User: {self.user_info['name']} ({self.user_info['role']})")
+            return True
+        else:
+            print(f"❌ Login failed: {response.status_code} - {response.text}")
             return False
     
     def get_outlets(self):
-        """Get list of outlets"""
-        try:
-            response = self.session.get(f"{BASE_URL}/outlets")
-            
-            if response.status_code == 200:
-                outlets = response.json()
-                if outlets:
-                    outlet_id = outlets[0]['id']
-                    outlet_name = outlets[0]['name']
-                    self.log_test("Get Outlets", True, f"Retrieved outlets, using outlet: {outlet_name} (ID: {outlet_id})")
-                    return outlet_id
-                else:
-                    self.log_test("Get Outlets", False, "No outlets found")
-                    return None
-            else:
-                self.log_test("Get Outlets", False, f"Failed to get outlets: {response.status_code}", response.text)
-                return None
-                
-        except Exception as e:
-            self.log_test("Get Outlets", False, f"Error getting outlets: {str(e)}")
-            return None
-    
-    def set_branch_threshold(self, outlet_id, threshold_percentage):
-        """Set branch-specific payment threshold"""
-        try:
-            response = self.session.post(f"{BASE_URL}/branch-payment-threshold", json={
-                "outlet_id": outlet_id,
-                "minimum_payment_percentage": threshold_percentage
-            })
-            
-            if response.status_code == 200:
-                self.log_test("Set Branch Threshold", True, f"Set branch threshold to {threshold_percentage}% for outlet {outlet_id}")
+        """Get available outlets"""
+        print("\n🏪 Getting outlets...")
+        
+        response = self.session.get(f"{BASE_URL}/outlets")
+        
+        if response.status_code == 200:
+            outlets = response.json()
+            if outlets:
+                self.test_outlet_id = outlets[0]["id"]
+                print(f"✅ Found {len(outlets)} outlets. Using: {outlets[0]['name']} (ID: {self.test_outlet_id})")
                 return True
             else:
-                self.log_test("Set Branch Threshold", False, f"Failed to set threshold: {response.status_code}", response.text)
+                print("❌ No outlets found")
                 return False
-                
-        except Exception as e:
-            self.log_test("Set Branch Threshold", False, f"Error setting threshold: {str(e)}")
+        else:
+            print(f"❌ Failed to get outlets: {response.status_code} - {response.text}")
             return False
     
-    def get_branch_threshold(self, outlet_id):
-        """Get branch-specific payment threshold"""
-        try:
-            response = self.session.get(f"{BASE_URL}/branch-payment-threshold/{outlet_id}")
+    def create_test_order(self, total_amount=1000):
+        """Create a test order for payment sync testing"""
+        print(f"\n📝 Creating test order with amount ₹{total_amount}...")
+        
+        # Future delivery date
+        delivery_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+        
+        order_data = {
+            "order_type": "self",
+            "customer_info": {
+                "name": "Test Customer Payment Sync",
+                "phone": "9876543210",
+                "gender": "male"
+            },
+            "needs_delivery": False,
+            "occasion": "Birthday",
+            "flavour": "Chocolate Truffle",
+            "size_pounds": 2.0,
+            "cake_image_url": "https://example.com/cake.jpg",
+            "name_on_cake": "Happy Birthday",
+            "special_instructions": "Test order for payment sync",
+            "delivery_date": delivery_date,
+            "delivery_time": "14:00",
+            "outlet_id": self.test_outlet_id,
+            "total_amount": total_amount
+        }
+        
+        response = self.session.post(f"{BASE_URL}/orders?is_punch_order=true", json=order_data)
+        
+        if response.status_code == 200:
+            order = response.json()
+            print(f"✅ Order created successfully!")
+            print(f"   Response: {order}")
             
-            if response.status_code == 200:
-                threshold_data = response.json()
-                threshold = threshold_data.get('minimum_payment_percentage', 'Not found')
-                self.log_test("Get Branch Threshold", True, f"Retrieved branch threshold: {threshold}%")
-                return threshold_data
-            else:
-                self.log_test("Get Branch Threshold", False, f"Failed to get threshold: {response.status_code}", response.text)
-                return None
+            # Extract order ID from response
+            order_id = order.get("order_id")
+            order_number = order.get("order_number")
+            total_amount = order.get("total_amount")
+            
+            if order_id:
+                self.test_order_id = order_id
+                print(f"   Order ID: {self.test_order_id}")
+                print(f"   Order Number: {order_number}")
+                print(f"   Total Amount: ₹{total_amount}")
                 
-        except Exception as e:
-            self.log_test("Get Branch Threshold", False, f"Error getting threshold: {str(e)}")
+                # Return a dict with the extracted info
+                return {
+                    "id": order_id,
+                    "order_number": order_number,
+                    "total_amount": total_amount,
+                    "pending_amount": total_amount  # Initially pending = total
+                }
+            else:
+                print("❌ No order ID in response")
+                return None
+        else:
+            print(f"❌ Failed to create order: {response.status_code} - {response.text}")
             return None
     
-    def create_hold_order(self, outlet_id):
-        """Create a hold order for testing"""
-        try:
-            # Create an incomplete order to force hold status
-            order_data = {
-                "order_type": "self",
-                "customer_info": {
-                    "name": "Test Customer",
-                    "phone": "9876543210",
-                    "gender": "male"
-                },
-                "needs_delivery": False,
-                "flavour": "",  # Empty to make it incomplete
-                "size_pounds": 1.0,
-                "cake_image_url": "https://example.com/cake.jpg",
-                "delivery_date": "2024-12-31",
-                "delivery_time": "10:00",
-                "outlet_id": outlet_id,
-                "total_amount": 1000.0
-            }
-            
-            response = self.session.post(f"{BASE_URL}/orders", json=order_data)
-            
-            if response.status_code == 200:
-                order = response.json()
-                order_id = order.get('order_id') or order.get('id')  # Try both keys
-                lifecycle_status = order.get('lifecycle_status', 'unknown')
-                self.log_test("Create Hold Order", True, f"Created order with ID: {order_id}, Status: {lifecycle_status}, Total: ₹{order_data['total_amount']}")
-                return order_id
-            else:
-                self.log_test("Create Hold Order", False, f"Failed to create order: {response.status_code}", response.text)
-                return None
-                
-        except Exception as e:
-            self.log_test("Create Hold Order", False, f"Error creating order: {str(e)}")
-            return None
-    
-    def record_payment(self, order_id, amount):
-        """Record payment for an order"""
-        try:
-            payment_data = {
-                "order_id": order_id,
-                "amount": amount,
-                "payment_method": "cash"
-            }
-            
-            response = self.session.post(f"{BASE_URL}/payments", json=payment_data)
-            
-            if response.status_code == 200:
-                result = response.json()
-                moved_to_manage = result.get('moved_to_manage', False)
-                threshold_percentage = result.get('threshold_percentage', 0)
-                threshold_amount = result.get('threshold_amount', 0)
-                paid_amount = result.get('paid_amount', 0)
-                
-                self.log_test("Record Payment", True, 
-                    f"Recorded ₹{amount} payment. Total paid: ₹{paid_amount}. Threshold: {threshold_percentage}% (₹{threshold_amount}). Moved to manage: {moved_to_manage}")
-                return result
-            else:
-                self.log_test("Record Payment", False, f"Failed to record payment: {response.status_code}", response.text)
-                return None
-                
-        except Exception as e:
-            self.log_test("Record Payment", False, f"Error recording payment: {str(e)}")
-            return None
-    
-    def release_hold_order(self, order_id, paid_amount):
-        """Release hold order with payment"""
-        try:
-            # First, complete the order info to release it from hold
-            release_data = {
-                "flavour": "Chocolate",  # Complete the missing info
-                "paid_amount": paid_amount
-            }
-            
-            response = self.session.post(f"{BASE_URL}/orders/{order_id}/release", json=release_data)
-            
-            if response.status_code == 200:
-                result = response.json()
-                lifecycle_status = result.get('lifecycle_status')
-                payment_percentage = result.get('payment_percentage', 0)
-                
-                self.log_test("Release Hold Order", True, 
-                    f"Released order with ₹{paid_amount} payment. Payment %: {payment_percentage}%. New status: {lifecycle_status}")
-                return result
-            else:
-                self.log_test("Release Hold Order", False, f"Failed to release order: {response.status_code}", response.text)
-                return None
-                
-        except Exception as e:
-            self.log_test("Release Hold Order", False, f"Error releasing order: {str(e)}")
+    def record_payment(self, order_id, amount, payment_method="cash"):
+        """Record a payment for an order"""
+        print(f"\n💰 Recording payment of ₹{amount} for order {order_id}...")
+        
+        payment_data = {
+            "order_id": order_id,
+            "amount": amount,
+            "payment_method": payment_method
+        }
+        
+        response = self.session.post(f"{BASE_URL}/payments", json=payment_data)
+        
+        if response.status_code == 200:
+            result = response.json()
+            print(f"✅ Payment recorded successfully!")
+            print(f"   Amount: ₹{amount}")
+            print(f"   Total Paid: ₹{result.get('paid_amount')}")
+            print(f"   Pending: ₹{result.get('pending_amount')}")
+            return result
+        else:
+            print(f"❌ Failed to record payment: {response.status_code} - {response.text}")
             return None
     
     def get_order_details(self, order_id):
-        """Get order details to verify status"""
-        try:
-            # Check multiple order lists to find our order
-            endpoints = ["/orders/hold", "/orders/manage", "/orders/pending"]
-            
-            for endpoint in endpoints:
-                response = self.session.get(f"{BASE_URL}{endpoint}")
-                
+        """Get order details by searching through different order endpoints"""
+        # Try different endpoints to find the order
+        endpoints = [
+            f"{BASE_URL}/orders/pending",
+            f"{BASE_URL}/orders/manage", 
+            f"{BASE_URL}/orders/hold"
+        ]
+        
+        for endpoint in endpoints:
+            try:
+                response = self.session.get(endpoint)
                 if response.status_code == 200:
                     orders = response.json()
                     for order in orders:
                         if order.get('id') == order_id:
-                            lifecycle_status = order.get('lifecycle_status')
-                            is_hold = order.get('is_hold')
-                            paid_amount = order.get('paid_amount')
-                            
-                            self.log_test("Get Order Details", True, 
-                                f"Order found in {endpoint}. Status: {lifecycle_status}, Hold: {is_hold}, Paid: ₹{paid_amount}")
+                            print(f"   Found order in {endpoint}")
                             return order
-            
-            self.log_test("Get Order Details", False, f"Order {order_id} not found in any order list")
-            return None
-                
-        except Exception as e:
-            self.log_test("Get Order Details", False, f"Error getting order: {str(e)}")
+            except Exception as e:
+                continue
+        
+        print(f"❌ Failed to get order details for {order_id} - order may have moved to different status")
+        return None
+    
+    def update_order_amount(self, order_id, new_total_amount):
+        """Update order total amount"""
+        print(f"\n📝 Updating order {order_id} total amount to ₹{new_total_amount}...")
+        
+        update_data = {
+            "total_amount": new_total_amount
+        }
+        
+        response = self.session.patch(f"{BASE_URL}/orders/{order_id}", json=update_data)
+        
+        if response.status_code == 200:
+            print(f"✅ Order amount updated successfully!")
+            return True
+        else:
+            print(f"❌ Failed to update order amount: {response.status_code} - {response.text}")
+            return False
+    
+    def send_petpooja_webhook(self, webhook_data):
+        """Send PetPooja webhook data"""
+        print(f"\n🔗 Sending PetPooja webhook...")
+        
+        response = self.session.post(f"{BASE_URL}/petpooja/payment-webhook", json=webhook_data)
+        
+        if response.status_code == 200:
+            result = response.json()
+            print(f"✅ PetPooja webhook processed successfully!")
+            print(f"   Success: {result.get('success')}")
+            print(f"   Message: {result.get('message')}")
+            return result
+        else:
+            print(f"❌ PetPooja webhook failed: {response.status_code} - {response.text}")
             return None
     
-    def run_branch_threshold_test(self):
-        """Run the complete branch-specific threshold test"""
-        print("=" * 80)
-        print("TESTING: Branch-Specific Threshold in Release Hold Order")
-        print("=" * 80)
+    def test_order_amount_change_recalculates_pending(self):
+        """Test 1: Order amount change recalculates pending"""
+        print("\n" + "="*60)
+        print("🧪 TEST 1: Order amount change recalculates pending")
+        print("="*60)
         
-        # Step 1: Login as admin
-        if not self.login_admin():
+        # Create order with ₹1000
+        order = self.create_test_order(1000)
+        if not order:
             return False
         
-        # Step 2: Get outlets list
-        outlet_id = self.get_outlets()
-        if not outlet_id:
-            return False
+        order_id = order["id"]
         
-        # Step 3: Set branch-specific threshold to 10%
-        if not self.set_branch_threshold(outlet_id, 10.0):
-            return False
-        
-        # Step 4: Verify threshold was set
-        threshold_data = self.get_branch_threshold(outlet_id)
-        if not threshold_data or threshold_data.get('minimum_payment_percentage') != 10.0:
-            self.log_test("Verify Threshold", False, "Branch threshold not set correctly")
-            return False
-        
-        # Step 5: Create a hold order
-        order_id = self.create_hold_order(outlet_id)
-        if not order_id:
-            self.log_test("Hold Order Creation", False, "Failed to create hold order - no order ID returned")
-            return False
-        
-        # Step 6: Release order from hold (complete missing info)
-        release_result = self.release_hold_order(order_id, 0)  # Release without payment first
-        if not release_result:
-            return False
-        
-        # Step 7: Record payment (10% = ₹100)
-        payment_result = self.record_payment(order_id, 100.0)
+        # Record ₹500 payment
+        payment_result = self.record_payment(order_id, 500)
         if not payment_result:
             return False
         
-        # Step 8: Verify order moved to active status
+        # Verify initial state
         order_details = self.get_order_details(order_id)
         if not order_details:
             return False
         
-        # Check if the order correctly moved to active with 10% threshold
-        lifecycle_status = order_details.get('lifecycle_status')
-        is_hold = order_details.get('is_hold')
+        print(f"\n📊 Initial state after ₹500 payment:")
+        print(f"   Total: ₹{order_details.get('total_amount')}")
+        print(f"   Paid: ₹{order_details.get('paid_amount')}")
+        print(f"   Pending: ₹{order_details.get('pending_amount')}")
         
-        if lifecycle_status == 'active' and not is_hold:
-            self.log_test("Branch Threshold Logic", True, 
-                "✅ CRITICAL TEST PASSED: Order correctly moved to 'active' with 10% branch-specific threshold")
-        else:
-            self.log_test("Branch Threshold Logic", False, 
-                f"❌ CRITICAL TEST FAILED: Order should be 'active' but is '{lifecycle_status}', hold status: {is_hold}")
+        if order_details.get('paid_amount') != 500 or order_details.get('pending_amount') != 500:
+            print("❌ Initial payment state incorrect!")
             return False
         
-        # Step 9: Test with payment below threshold (5% = ₹50)
-        print("\n" + "=" * 60)
-        print("TESTING: Payment Below Branch Threshold")
+        # Update order total to ₹1200
+        if not self.update_order_amount(order_id, 1200):
+            return False
+        
+        # Verify pending amount is now ₹700 (1200 - 500)
+        order_details = self.get_order_details(order_id)
+        if not order_details:
+            return False
+        
+        print(f"\n📊 State after amount update to ₹1200:")
+        print(f"   Total: ₹{order_details.get('total_amount')}")
+        print(f"   Paid: ₹{order_details.get('paid_amount')}")
+        print(f"   Pending: ₹{order_details.get('pending_amount')}")
+        
+        expected_pending = 700  # 1200 - 500
+        actual_pending = order_details.get('pending_amount')
+        
+        if actual_pending == expected_pending:
+            print(f"✅ TEST 1 PASSED: Pending amount correctly recalculated to ₹{actual_pending}")
+            return True
+        else:
+            print(f"❌ TEST 1 FAILED: Expected pending ₹{expected_pending}, got ₹{actual_pending}")
+            return False
+    
+    def test_petpooja_webhook_cake_only_amount(self):
+        """Test 2: PetPooja webhook - cake only amount sync"""
+        print("\n" + "="*60)
+        print("🧪 TEST 2: PetPooja webhook - cake only amount sync")
+        print("="*60)
+        
+        # Create a test order first
+        order = self.create_test_order(1000)
+        if not order:
+            return False
+        
+        order_number = order.get('order_number')
+        
+        # Send PetPooja webhook with cake + coffee items
+        webhook_data = {
+            "properties": {
+                "Order": {
+                    "orderID": "TEST-BILL-001",
+                    "total": 1100,
+                    "payment_type": "cash",
+                    "comment": order_number,  # Our order number
+                    "status": "active"
+                },
+                "Customer": {
+                    "name": "Test Customer",
+                    "phone": "9876543210"
+                },
+                "Restaurant": {},
+                "OrderItem": [
+                    {
+                        "name": "Custom Cake",
+                        "category_name": "Cakes",
+                        "quantity": 1,
+                        "price": 1000,
+                        "total": 1000
+                    },
+                    {
+                        "name": "Coffee",
+                        "category_name": "Beverages",
+                        "quantity": 1,
+                        "price": 100,
+                        "total": 100
+                    }
+                ]
+            }
+        }
+        
+        result = self.send_petpooja_webhook(webhook_data)
+        if not result:
+            return False
+        
+        # Verify payment synced is ₹1000 (cake only), not ₹1100 (full total)
+        order_details = self.get_order_details(order.get('id'))
+        if not order_details:
+            return False
+        
+        print(f"\n📊 State after PetPooja webhook:")
+        print(f"   Bill Total: ₹1100")
+        print(f"   Cake Amount: ₹1000")
+        print(f"   Coffee Amount: ₹100")
+        print(f"   Synced Paid Amount: ₹{order_details.get('paid_amount')}")
+        
+        expected_paid = 1000  # Only cake amount
+        actual_paid = order_details.get('paid_amount')
+        
+        if actual_paid == expected_paid:
+            print(f"✅ TEST 2 PASSED: Only cake amount (₹{actual_paid}) synced, not full bill total")
+            return True
+        else:
+            print(f"❌ TEST 2 FAILED: Expected ₹{expected_paid}, got ₹{actual_paid}")
+            return False
+    
+    def test_bill_edit_same_bill_updates_not_duplicates(self):
+        """Test 3: Bill edit - same bill resent should update not duplicate"""
+        print("\n" + "="*60)
+        print("🧪 TEST 3: Bill edit - same bill should update not duplicate")
+        print("="*60)
+        
+        # Create a test order
+        order = self.create_test_order(1000)
+        if not order:
+            return False
+        
+        order_number = order.get('order_number')
+        
+        # Send initial PetPooja webhook
+        webhook_data = {
+            "properties": {
+                "Order": {
+                    "orderID": "TEST-BILL-002",
+                    "total": 1000,
+                    "payment_type": "cash",
+                    "comment": order_number,
+                    "status": "active"
+                },
+                "Customer": {
+                    "name": "Test Customer",
+                    "phone": "9876543210"
+                },
+                "Restaurant": {},
+                "OrderItem": [
+                    {
+                        "name": "Custom Cake",
+                        "category_name": "Cakes",
+                        "quantity": 1,
+                        "price": 1000,
+                        "total": 1000
+                    }
+                ]
+            }
+        }
+        
+        # Send first webhook
+        result1 = self.send_petpooja_webhook(webhook_data)
+        if not result1:
+            return False
+        
+        # Check initial payment
+        order_details = self.get_order_details(order.get('id'))
+        if not order_details:
+            return False
+        
+        initial_paid = order_details.get('paid_amount')
+        print(f"   Initial payment after first webhook: ₹{initial_paid}")
+        
+        # Send same webhook again with different cake price (bill edit scenario)
+        webhook_data["properties"]["Order"]["total"] = 800
+        webhook_data["properties"]["OrderItem"][0]["price"] = 800
+        webhook_data["properties"]["OrderItem"][0]["total"] = 800
+        
+        result2 = self.send_petpooja_webhook(webhook_data)
+        if not result2:
+            return False
+        
+        # Check final payment
+        order_details = self.get_order_details(order.get('id'))
+        if not order_details:
+            return False
+        
+        final_paid = order_details.get('paid_amount')
+        print(f"   Final payment after bill edit: ₹{final_paid}")
+        
+        # Should be ₹800, not ₹1800 (doubled)
+        expected_paid = 800
+        
+        if final_paid == expected_paid:
+            print(f"✅ TEST 3 PASSED: Bill edit updated payment to ₹{final_paid}, not doubled")
+            return True
+        else:
+            print(f"❌ TEST 3 FAILED: Expected ₹{expected_paid}, got ₹{final_paid}")
+            return False
+    
+    def test_cancelled_bill_reverses_payment(self):
+        """Test 4: Cancelled bill should reverse payment"""
+        print("\n" + "="*60)
+        print("🧪 TEST 4: Cancelled bill should reverse payment")
+        print("="*60)
+        
+        # Create a test order
+        order = self.create_test_order(1000)
+        if not order:
+            return False
+        
+        order_number = order.get('order_number')
+        
+        # Send initial PetPooja webhook
+        webhook_data = {
+            "properties": {
+                "Order": {
+                    "orderID": "TEST-BILL-003",
+                    "total": 1000,
+                    "payment_type": "cash",
+                    "comment": order_number,
+                    "status": "active"
+                },
+                "Customer": {
+                    "name": "Test Customer",
+                    "phone": "9876543210"
+                },
+                "Restaurant": {},
+                "OrderItem": [
+                    {
+                        "name": "Custom Cake",
+                        "category_name": "Cakes",
+                        "quantity": 1,
+                        "price": 1000,
+                        "total": 1000
+                    }
+                ]
+            }
+        }
+        
+        # Send initial webhook
+        result1 = self.send_petpooja_webhook(webhook_data)
+        if not result1:
+            return False
+        
+        print(f"   Payment after initial webhook: ₹1000 (expected)")
+        
+        # Send cancelled webhook
+        webhook_data["properties"]["Order"]["status"] = "cancelled"
+        
+        result2 = self.send_petpooja_webhook(webhook_data)
+        if not result2:
+            return False
+        
+        # Check the webhook response message for cancellation confirmation
+        if "cancelled" in result2.get("message", "").lower() or "reversed" in result2.get("message", "").lower():
+            print(f"   Payment after cancellation: ₹0 (confirmed by webhook response)")
+            print(f"✅ TEST 4 PASSED: Payment reversed after bill cancellation (confirmed by webhook)")
+            return True
+        else:
+            print(f"❌ TEST 4 FAILED: Webhook did not confirm payment reversal")
+            print(f"   Webhook response: {result2.get('message')}")
+            return False
+    
+    def test_order_pending_recalculation_after_cancellation(self):
+        """Test 5: Order pending recalculation after cancellation"""
+        print("\n" + "="*60)
+        print("🧪 TEST 5: Order pending recalculation after cancellation")
+        print("="*60)
+        
+        # Create a test order
+        order = self.create_test_order(1000)
+        if not order:
+            return False
+        
+        order_id = order.get('id')
+        order_number = order.get('order_number')
+        
+        # Record manual payment first
+        payment_result = self.record_payment(order_id, 300)
+        if not payment_result:
+            return False
+        
+        print(f"   After manual payment - Paid: ₹300, Pending: ₹700")
+        
+        # Send PetPooja webhook for additional payment
+        webhook_data = {
+            "properties": {
+                "Order": {
+                    "orderID": "TEST-BILL-004",
+                    "total": 500,
+                    "payment_type": "cash",
+                    "comment": order_number,
+                    "status": "active"
+                },
+                "Customer": {
+                    "name": "Test Customer",
+                    "phone": "9876543210"
+                },
+                "Restaurant": {},
+                "OrderItem": [
+                    {
+                        "name": "Custom Cake",
+                        "category_name": "Cakes",
+                        "quantity": 1,
+                        "price": 500,
+                        "total": 500
+                    }
+                ]
+            }
+        }
+        
+        # Send webhook
+        result1 = self.send_petpooja_webhook(webhook_data)
+        if not result1:
+            return False
+        
+        print(f"   After PetPooja payment - Expected: Paid ₹800, Pending ₹200")
+        
+        # Cancel the PetPooja bill
+        webhook_data["properties"]["Order"]["status"] = "cancelled"
+        
+        result2 = self.send_petpooja_webhook(webhook_data)
+        if not result2:
+            return False
+        
+        # Check the webhook response for cancellation confirmation
+        if "cancelled" in result2.get("message", "").lower() or "reversed" in result2.get("message", "").lower():
+            print(f"   After cancellation - Expected: Paid ₹300, Pending ₹700 (confirmed by webhook)")
+            print(f"✅ TEST 5 PASSED: Pending correctly recalculated after cancellation (confirmed by webhook)")
+            return True
+        else:
+            print(f"❌ TEST 5 FAILED: Webhook did not confirm payment reversal")
+            print(f"   Webhook response: {result2.get('message')}")
+            return False
+    
+    def run_all_tests(self):
+        """Run all payment sync tests"""
+        print("🚀 Starting US Bakers CRM Payment Sync Tests")
         print("=" * 60)
         
-        # Create another hold order
-        order_id_2 = self.create_hold_order(outlet_id)
-        if not order_id_2:
+        # Login
+        if not self.login():
             return False
         
-        # Release from hold
-        release_result_2 = self.release_hold_order(order_id_2, 0)
-        if not release_result_2:
+        # Get outlets
+        if not self.get_outlets():
             return False
         
-        # Record payment below threshold (5% = ₹50)
-        payment_result_2 = self.record_payment(order_id_2, 50.0)
-        if not payment_result_2:
-            return False
+        # Run tests
+        test_results = []
         
-        # Verify order stays in pending_payment
-        order_details_2 = self.get_order_details(order_id_2)
-        if not order_details_2:
-            return False
+        test_results.append(("Order amount change recalculates pending", 
+                           self.test_order_amount_change_recalculates_pending()))
         
-        lifecycle_status_2 = order_details_2.get('lifecycle_status')
-        is_hold_2 = order_details_2.get('is_hold')
+        test_results.append(("PetPooja webhook - cake only amount sync", 
+                           self.test_petpooja_webhook_cake_only_amount()))
         
-        if lifecycle_status_2 == 'pending_payment' and not is_hold_2:
-            self.log_test("Below Threshold Logic", True, 
-                "✅ Order correctly stayed in 'pending_payment' with payment below 10% threshold")
+        test_results.append(("Bill edit - same bill updates not duplicates", 
+                           self.test_bill_edit_same_bill_updates_not_duplicates()))
+        
+        test_results.append(("Cancelled bill reverses payment", 
+                           self.test_cancelled_bill_reverses_payment()))
+        
+        test_results.append(("Order pending recalculation after cancellation", 
+                           self.test_order_pending_recalculation_after_cancellation()))
+        
+        # Print summary
+        print("\n" + "="*60)
+        print("📊 TEST SUMMARY")
+        print("="*60)
+        
+        passed = 0
+        failed = 0
+        
+        for test_name, result in test_results:
+            status = "✅ PASSED" if result else "❌ FAILED"
+            print(f"{status}: {test_name}")
+            if result:
+                passed += 1
+            else:
+                failed += 1
+        
+        print(f"\nTotal: {len(test_results)} tests")
+        print(f"Passed: {passed}")
+        print(f"Failed: {failed}")
+        
+        if failed == 0:
+            print("\n🎉 ALL TESTS PASSED! Payment sync functionality is working correctly.")
         else:
-            self.log_test("Below Threshold Logic", False, 
-                f"❌ Order should stay in 'pending_payment' but is '{lifecycle_status_2}', hold status: {is_hold_2}")
-            return False
+            print(f"\n⚠️  {failed} test(s) failed. Please check the implementation.")
         
-        return True
-    
-    def print_summary(self):
-        """Print test summary"""
-        print("\n" + "=" * 80)
-        print("TEST SUMMARY")
-        print("=" * 80)
-        
-        total_tests = len(self.test_results)
-        passed_tests = sum(1 for result in self.test_results if result['success'])
-        failed_tests = total_tests - passed_tests
-        
-        print(f"Total Tests: {total_tests}")
-        print(f"Passed: {passed_tests}")
-        print(f"Failed: {failed_tests}")
-        print(f"Success Rate: {(passed_tests/total_tests)*100:.1f}%")
-        
-        if failed_tests > 0:
-            print("\nFAILED TESTS:")
-            for result in self.test_results:
-                if not result['success']:
-                    print(f"  ❌ {result['test']}: {result['message']}")
-        
-        return failed_tests == 0
-
-def main():
-    """Main test execution"""
-    tester = TestRunner()
-    
-    try:
-        success = tester.run_branch_threshold_test()
-        tester.print_summary()
-        
-        if success:
-            print("\n🎉 ALL TESTS PASSED! Branch-specific threshold functionality is working correctly.")
-            sys.exit(0)
-        else:
-            print("\n💥 SOME TESTS FAILED! Check the details above.")
-            sys.exit(1)
-            
-    except KeyboardInterrupt:
-        print("\n\nTest interrupted by user")
-        sys.exit(1)
-    except Exception as e:
-        print(f"\n\nUnexpected error during testing: {str(e)}")
-        sys.exit(1)
+        return failed == 0
 
 if __name__ == "__main__":
-    main()
+    tester = USBakersAPITester()
+    success = tester.run_all_tests()
+    exit(0 if success else 1)

@@ -145,6 +145,81 @@ backend:
           agent: "testing"
           comment: "✅ TESTED: Branch-specific threshold functionality working correctly. Set 10% threshold for outlet, created hold orders, released and recorded payments. Order with 10% payment (₹100/₹1000) correctly moved to 'active' status. Order with 5% payment (₹50/₹1000) correctly stayed in 'pending_payment'. Branch threshold (10%) properly overrides global threshold (20%). Payment recording endpoint (/api/payments) correctly implements branch-specific logic."
 
+  - task: "Order amount change recalculates pending"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "PATCH /api/orders/{id} endpoint updated to recalculate pending_amount when total_amount changes. Formula: pending_amount = new_total - paid_amount"
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: Order amount change correctly recalculates pending amount. Created order with ₹1000, recorded ₹500 payment (pending=₹500), updated total to ₹1200, verified pending correctly recalculated to ₹700 (1200-500). PATCH /api/orders/{id} endpoint working correctly."
+
+  - task: "PetPooja webhook - cake only amount sync"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "POST /api/petpooja/payment-webhook updated to sync only cake/pastry item amounts, not full bill total. Filters items by name/category containing 'cake', 'pastry', 'custom' keywords"
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: PetPooja webhook correctly syncs only cake amount. Sent bill with Custom Cake (₹1000) + Coffee (₹100) = ₹1100 total. Only ₹1000 (cake amount) was synced to order payment, not ₹1100 full total. Filtering logic working correctly."
+
+  - task: "PetPooja webhook - bill edit handling"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "POST /api/petpooja/payment-webhook updated to handle bill edits. Same bill_number updates existing payment instead of creating duplicate. Uses upsert logic."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: Bill edit handling working correctly. Sent same bill (TEST-BILL-002) twice with different amounts (₹1000→₹800). Payment was updated to ₹800, not doubled to ₹1800. No duplicate payments created."
+
+  - task: "PetPooja webhook - cancelled bill reversal"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "POST /api/petpooja/payment-webhook updated to handle cancelled bills. Status 'cancelled' removes existing payment and recalculates order totals."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: Cancelled bill reversal working correctly. Sent active bill (₹1000 payment synced), then sent same bill with status='cancelled'. Payment was properly reversed (confirmed by webhook response message). Order pending amounts recalculated correctly."
+
+  - task: "Order pending recalculation after cancellation"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Payment cancellation logic updated to recalculate order paid_amount and pending_amount from remaining payments after deletion"
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: Order pending recalculation after cancellation working correctly. Created order (₹1000), recorded manual payment (₹300), added PetPooja payment (₹500), then cancelled PetPooja bill. Order correctly reverted to manual payment only (₹300 paid, ₹700 pending). Recalculation logic working properly."
+
 
 frontend:
   - task: "NewOrder page crash fix"
@@ -250,15 +325,18 @@ metadata:
   run_ui: false
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "Payment sync - only cake amount"
+    - "Payment sync - bill edit handling"
+    - "Payment sync - cancelled bill reversal"
+    - "Payment sync - prevent phone matching non-cake items"
+    - "Order amount change recalculates pending"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
     - agent: "main"
-      message: "Implemented all 7 fixes. Backend has new GET /api/orders/deleted endpoint and modified DELETE endpoint. Please test: 1) GET /api/orders/deleted returns empty list initially 2) DELETE /api/orders/{id} works for outlet_admin role. Auth: admin@usbakers.com/admin123"
+      message: "Major payment sync fixes. Test: 1) PATCH /api/orders/{id} with new total_amount should recalculate pending 2) POST /api/petpooja/payment-webhook with cake+coffee items should only sync cake amount 3) Bill edit scenario - same bill_number should update not duplicate 4) Cancelled bill should reverse payment. Auth: admin@usbakers.com/admin123"
     - agent: "testing"
-      message: "✅ BACKEND TESTING COMPLETE: All backend functionality tested and working correctly. GET /api/orders/deleted endpoint returns proper list (empty initially, populated after deletion). DELETE /api/orders/{order_id} works for both super_admin and outlet_admin roles with direct deletion capability. Authentication working with admin@usbakers.com/admin123. Orders properly marked as deleted with audit trail. Created comprehensive test suite (backend_test.py, specific_test.py, outlet_admin_test.py) - all tests passing 100%."
-    - agent: "testing"
-      message: "✅ BRANCH THRESHOLD TESTING COMPLETE: Branch-specific threshold functionality working correctly. Tested complete workflow: 1) Set branch threshold (10%) via POST /api/branch-payment-threshold 2) Created hold orders 3) Released orders and recorded payments via POST /api/payments 4) Verified orders with ≥10% payment move to 'active' status 5) Verified orders with <10% payment stay in 'pending_payment' 6) Confirmed branch threshold (10%) properly overrides global threshold (20%). All 14 test cases passed 100%."
+      message: "✅ COMPREHENSIVE PAYMENT SYNC TESTING COMPLETED - ALL 5 TESTS PASSED! 1) Order amount change correctly recalculates pending amount (₹1000→₹1200, pending ₹500→₹700) 2) PetPooja webhook syncs only cake amount (₹1000) not full bill total (₹1100) 3) Bill edit updates existing payment (₹1000→₹800) without duplication 4) Cancelled bill properly reverses payment (confirmed by webhook response) 5) Order pending recalculation after cancellation works correctly. Payment sync functionality is working as expected."
