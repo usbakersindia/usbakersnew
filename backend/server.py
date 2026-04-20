@@ -399,6 +399,7 @@ class Order(BaseModel):
     total_amount: float = 0.0
     paid_amount: float = 0.0
     pending_amount: float = 0.0
+    delivery_charge: float = 0.0  # Delivery charge included in total
     payment_synced_from_petpooja: bool = False
     
     # PetPooja Integration

@@ -33,7 +33,7 @@ import {
   Trash2,
   Camera
 } from 'lucide-react';
-import { Mic } from 'lucide-react';
+import { Mic, Printer } from 'lucide-react';
 import axios from 'axios';
 import * as XLSX from 'xlsx';
 
@@ -140,6 +140,8 @@ const ManageOrders = () => {
   const [dateTo, setDateTo] = useState('');
   const [occasionFilter, setOccasionFilter] = useState('all');
   const [flavourFilter, setFlavourFilter] = useState('all');
+  const [flavoursList, setFlavoursList] = useState([]);
+  const [occasionsList, setOccasionsList] = useState([]);
 
   const getImageUrl = (url) => {
     if (!url) return '';
@@ -158,7 +160,26 @@ const ManageOrders = () => {
     fetchOrders();
     fetchOutlets();
     fetchDeliveryPersons();
+    fetchFlavoursAndOccasions();
+    // Set default date to today
+    const today = new Date().toISOString().split('T')[0];
+    setDateFrom(today);
+    setDateTo(today);
   }, []);
+  const fetchFlavoursAndOccasions = async () => {
+    try {
+      const [flavRes, occRes] = await Promise.all([
+        axios.get(`${API_URL}/api/flavours`),
+        axios.get(`${API_URL}/api/occasions`)
+      ]);
+      setFlavoursList(flavRes.data);
+      setOccasionsList(occRes.data);
+    } catch (error) {
+      console.error('Failed to fetch flavours/occasions:', error);
+    }
+  };
+
+
 
   useEffect(() => {
     applyFilters();
@@ -268,6 +289,16 @@ const ManageOrders = () => {
       );
     }
 
+    // Sort by delivery time
+    filtered.sort((a, b) => {
+      const dateA = a.delivery_date || '';
+      const dateB = b.delivery_date || '';
+      if (dateA !== dateB) return dateA.localeCompare(dateB);
+      const timeA = a.delivery_time || '';
+      const timeB = b.delivery_time || '';
+      return timeA.localeCompare(timeB);
+    });
+
     setFilteredOrders(filtered);
   };
 
@@ -330,7 +361,8 @@ const ManageOrders = () => {
         size_pounds: parseFloat(editFormData.size_pounds),
         name_on_cake: editFormData.name_on_cake,
         total_amount: parseFloat(editFormData.total_amount),
-        special_instructions: editFormData.special_instructions
+        special_instructions: editFormData.special_instructions,
+        cake_image_url: editFormData.cake_image_url
       };
       
       await axios.patch(
@@ -617,6 +649,82 @@ const ManageOrders = () => {
       setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to cancel delivery' });
     }
   };
+
+  const downloadOrdersPDF = () => {
+    if (!filteredOrders || filteredOrders.length === 0) {
+      alert('No orders to download');
+      return;
+    }
+    
+    const dateRange = dateFrom && dateTo ? `${dateFrom} to ${dateTo}` : 'All dates';
+    
+    const rows = filteredOrders.map(order => `
+      <tr>
+        <td>${order.order_number}</td>
+        <td>${order.customer_info?.name || 'N/A'}<br/><small>${order.customer_info?.phone || ''}</small></td>
+        <td>${order.flavour || 'N/A'}</td>
+        <td>${order.size_pounds || '-'} lbs</td>
+        <td>${order.delivery_date || ''}<br/><small>${order.delivery_time || ''}</small></td>
+        <td>${order.occasion || 'N/A'}</td>
+        <td>${order.status?.replace(/_/g, ' ').toUpperCase() || ''}</td>
+        <td>₹${order.total_amount?.toFixed(2) || '0'}</td>
+        <td>₹${order.paid_amount?.toFixed(2) || '0'}</td>
+        <td>₹${order.pending_amount?.toFixed(2) || '0'}</td>
+        <td>${order.needs_delivery ? 'Delivery' : 'Pickup'}</td>
+      </tr>
+    `).join('');
+    
+    const totalAmount = filteredOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0);
+    const totalPaid = filteredOrders.reduce((sum, o) => sum + (o.paid_amount || 0), 0);
+    const totalPending = filteredOrders.reduce((sum, o) => sum + (o.pending_amount || 0), 0);
+    
+    const html = `
+    <html>
+    <head>
+      <title>US Bakers - Orders Report</title>
+      <style>
+        body { font-family: Arial, sans-serif; padding: 20px; font-size: 11px; }
+        h1 { color: #e92587; text-align: center; }
+        h3 { text-align: center; color: #666; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th { background: #e92587; color: white; padding: 6px 4px; text-align: left; font-size: 10px; }
+        td { padding: 5px 4px; border-bottom: 1px solid #eee; font-size: 10px; }
+        tr:hover { background: #fff5f9; }
+        .summary { margin-top: 20px; display: flex; justify-content: space-around; }
+        .summary-card { background: #f8f8f8; padding: 10px 20px; border-radius: 8px; text-align: center; }
+        .summary-card .amount { font-size: 18px; font-weight: bold; color: #e92587; }
+        small { color: #888; }
+        @media print { body { padding: 0; } }
+      </style>
+    </head>
+    <body>
+      <h1>US BAKERS</h1>
+      <h3>Orders Report - ${dateRange} (${filteredOrders.length} orders)</h3>
+      <div class="summary">
+        <div class="summary-card"><div>Total Amount</div><div class="amount">₹${totalAmount.toFixed(2)}</div></div>
+        <div class="summary-card"><div>Total Paid</div><div class="amount" style="color: green;">₹${totalPaid.toFixed(2)}</div></div>
+        <div class="summary-card"><div>Total Pending</div><div class="amount" style="color: orange;">₹${totalPending.toFixed(2)}</div></div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Order #</th><th>Customer</th><th>Flavour</th><th>Size</th><th>Delivery</th><th>Occasion</th><th>Status</th><th>Total</th><th>Paid</th><th>Pending</th><th>Type</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <p style="text-align:center; color:#999; margin-top:20px;">Generated on ${new Date().toLocaleString()}</p>
+    </body>
+    </html>`;
+    
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 500);
+  };
+
+
 
   const exportOrdersToExcel = () => {
     if (!filteredOrders || filteredOrders.length === 0) {
@@ -945,10 +1053,16 @@ const ManageOrders = () => {
             <h1 className="text-3xl font-bold" style={{ color: '#e92587' }}>Manage Orders</h1>
             <p className="text-gray-600 mt-1">Track and manage all bakery orders</p>
           </div>
-          <Button variant="outline" onClick={exportOrdersToExcel} disabled={!filteredOrders || filteredOrders.length === 0}>
-            <Download className="h-4 w-4 mr-2" />
-            Export to Excel
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={exportOrdersToExcel} disabled={!filteredOrders || filteredOrders.length === 0}>
+              <Download className="h-4 w-4 mr-2" />
+              Excel
+            </Button>
+            <Button variant="outline" onClick={downloadOrdersPDF} disabled={!filteredOrders || filteredOrders.length === 0} className="border-pink-600 text-pink-600 hover:bg-pink-50">
+              <Printer className="h-4 w-4 mr-2" />
+              PDF
+            </Button>
+          </div>
         </div>
 
         {message.text && (
@@ -1255,6 +1369,11 @@ const ManageOrders = () => {
                                 <div className="font-bold" style={{ color: '#e92587' }}>
                                   ₹{order.total_amount.toFixed(2)}
                                 </div>
+                                {order.delivery_charge > 0 && (
+                                  <div className="text-xs text-gray-400">
+                                    (incl. delivery ₹{order.delivery_charge.toFixed(2)})
+                                  </div>
+                                )}
                                 <div className="text-gray-500">
                                   Paid: ₹{order.paid_amount.toFixed(2)}
                                 </div>
@@ -1579,6 +1698,12 @@ const ManageOrders = () => {
                       <span>Total Amount:</span>
                       <span className="font-bold">₹{selectedOrder.total_amount.toFixed(2)}</span>
                     </div>
+                    {selectedOrder.delivery_charge > 0 && (
+                      <div className="flex justify-between text-gray-500 text-sm">
+                        <span>↳ Delivery Charge:</span>
+                        <span>₹{selectedOrder.delivery_charge.toFixed(2)}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between">
                       <span>Paid Amount:</span>
                       <span className="font-bold text-green-600">₹{selectedOrder.paid_amount.toFixed(2)}</span>
@@ -1771,17 +1896,41 @@ const ManageOrders = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label>Occasion *</Label>
-                    <Input
-                      value={editFormData.occasion}
-                      onChange={(e) => setEditFormData({...editFormData, occasion: e.target.value})}
-                    />
+                    <Select
+                      value={editFormData.occasion || ''}
+                      onValueChange={(value) => setEditFormData({...editFormData, occasion: value})}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select occasion" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {occasionsList.map((occ) => (
+                          <SelectItem key={occ.id} value={occ.name}>{occ.name}</SelectItem>
+                        ))}
+                        {editFormData.occasion && !occasionsList.find(o => o.name === editFormData.occasion) && (
+                          <SelectItem value={editFormData.occasion}>{editFormData.occasion}</SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <Label>Flavour *</Label>
-                    <Input
-                      value={editFormData.flavour}
-                      onChange={(e) => setEditFormData({...editFormData, flavour: e.target.value})}
-                    />
+                    <Select
+                      value={editFormData.flavour || ''}
+                      onValueChange={(value) => setEditFormData({...editFormData, flavour: value})}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select flavour" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {flavoursList.map((flav) => (
+                          <SelectItem key={flav.id} value={flav.name}>{flav.name}</SelectItem>
+                        ))}
+                        {editFormData.flavour && !flavoursList.find(f => f.name === editFormData.flavour) && (
+                          <SelectItem value={editFormData.flavour}>{editFormData.flavour}</SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -1816,6 +1965,41 @@ const ManageOrders = () => {
                     value={editFormData.special_instructions || ''}
                     onChange={(e) => setEditFormData({...editFormData, special_instructions: e.target.value})}
                   />
+                </div>
+                <div>
+                  <Label>Cake Image</Label>
+                  <div className="flex items-center gap-3 mt-1">
+                    {editFormData.cake_image_url && (
+                      <img 
+                        src={getImageUrl(editFormData.cake_image_url)} 
+                        alt="Current" 
+                        className="w-16 h-16 object-cover rounded border"
+                      />
+                    )}
+                    <div>
+                      <input
+                        type="file"
+                        accept="image/*,.heic,.heif"
+                        className="text-sm"
+                        onChange={async (e) => {
+                          const file = e.target.files[0];
+                          if (!file) return;
+                          const formData = new FormData();
+                          formData.append('file', file);
+                          try {
+                            const res = await axios.post(`${API_URL}/api/upload`, formData, {
+                              headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
+                            });
+                            setEditFormData({...editFormData, cake_image_url: res.data.file_url});
+                            setMessage({ type: 'success', text: 'Image updated' });
+                          } catch (err) {
+                            setMessage({ type: 'error', text: 'Failed to upload image' });
+                          }
+                        }}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Upload new image to replace current one</p>
+                    </div>
+                  </div>
                 </div>
                 <div className="flex justify-end space-x-2 pt-4">
                   <Button variant="outline" onClick={() => setEditDialogOpen(false)}>

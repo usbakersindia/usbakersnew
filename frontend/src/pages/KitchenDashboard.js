@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CheckCircle, Clock, Filter, Download } from 'lucide-react';
+import { CheckCircle, Clock, Filter, Download, Mic } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -211,6 +211,13 @@ const KitchenDashboard = () => {
   };
 
 
+    const getImageUrl = (url) => {
+    if (!url) return '';
+    if (url.startsWith('http')) return url;
+    if (url.startsWith('/uploads/')) return `${API}/api${url}`;
+    return `${API}${url}`;
+  };
+
   const renderOrdersTable = (ordersList) => (
     <Table>
       <TableHeader>
@@ -233,6 +240,7 @@ const KitchenDashboard = () => {
           <TableHead>Flavour</TableHead>
           <TableHead>Size</TableHead>
           <TableHead>Name on Cake</TableHead>
+          <TableHead>Instructions</TableHead>
           <TableHead>Status</TableHead>
           <TableHead>Customer</TableHead>
         </TableRow>
@@ -240,7 +248,7 @@ const KitchenDashboard = () => {
       <TableBody>
         {ordersList.length === 0 ? (
           <TableRow>
-            <TableCell colSpan={8} className="text-center text-gray-500">No orders found</TableCell>
+            <TableCell colSpan={9} className="text-center text-gray-500">No orders found</TableCell>
           </TableRow>
         ) : (
           ordersList.map(order => (
@@ -258,7 +266,14 @@ const KitchenDashboard = () => {
                   }}
                 />
               </TableCell>
-              <TableCell className="font-medium">{order.order_number}</TableCell>
+              <TableCell className="font-medium">
+                <div className="flex items-center gap-1">
+                  {order.order_number}
+                  {order.voice_instruction_url && (
+                    <Mic className="h-3.5 w-3.5 text-blue-500" title="Has voice instructions" />
+                  )}
+                </div>
+              </TableCell>
               <TableCell>
                 <div className="text-sm">
                   <div>{new Date(order.delivery_date).toLocaleDateString()}</div>
@@ -268,6 +283,18 @@ const KitchenDashboard = () => {
               <TableCell>{order.flavour}</TableCell>
               <TableCell>{order.size_pounds} lbs</TableCell>
               <TableCell>{order.name_on_cake || '-'}</TableCell>
+              <TableCell>
+                <div className="max-w-[200px]">
+                  {order.special_instructions && (
+                    <p className="text-xs text-gray-600 truncate" title={order.special_instructions}>
+                      {order.special_instructions}
+                    </p>
+                  )}
+                  {order.voice_instruction_url && (
+                    <audio controls src={getImageUrl(order.voice_instruction_url)} className="w-full h-7 mt-1" />
+                  )}
+                </div>
+              </TableCell>
               <TableCell>
                 <Badge variant={order.status === 'ready' ? 'success' : 'default'}>
                   {order.status}
